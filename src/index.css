@@ -1,0 +1,567 @@
+:root {
+  --bg: #0f1419;
+  --surface: #1a212b;
+  --surface-2: #232c38;
+  --border: #2e3947;
+  --text: #e6edf3;
+  --muted: #8b98a9;
+  --accent: #4cc38a;
+  --accent-dim: #2f7d5b;
+  --danger: #e5534b;
+  --warn: #d9a441;
+  --radius: 12px;
+  --maxw: 720px;
+
+  color-scheme: dark;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  color: var(--text);
+  background: var(--bg);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  -webkit-font-smoothing: antialiased;
+}
+
+button {
+  font: inherit;
+  cursor: pointer;
+}
+
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+/* Layout ------------------------------------------------------------- */
+.app {
+  max-width: var(--maxw);
+  margin: 0 auto;
+  padding: 0 16px 96px;
+}
+
+.app-header {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: var(--bg);
+  padding: 18px 0 8px;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+}
+
+.app-header h1 {
+  font-size: 18px;
+  margin: 0;
+  letter-spacing: 0.3px;
+}
+
+.app-header .sub {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+/* Bottom tab bar ----------------------------------------------------- */
+.tabbar {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 20;
+  display: flex;
+  justify-content: center;
+  gap: 4px;
+  padding: 6px 8px calc(6px + env(safe-area-inset-bottom));
+  background: rgba(15, 20, 25, 0.92);
+  backdrop-filter: blur(10px);
+  border-top: 1px solid var(--border);
+}
+
+.tabbar button {
+  flex: 1;
+  max-width: 120px;
+  background: none;
+  border: none;
+  color: var(--muted);
+  padding: 6px 4px;
+  border-radius: 10px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  font-size: 11px;
+}
+
+.tabbar button .icon {
+  font-size: 18px;
+  line-height: 1;
+}
+
+.tabbar button.active {
+  color: var(--accent);
+  background: var(--surface);
+}
+
+/* Cards & sections --------------------------------------------------- */
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px;
+  margin: 12px 0;
+}
+
+.card h2 {
+  font-size: 15px;
+  margin: 0 0 12px;
+}
+
+.card h3 {
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: var(--muted);
+  margin: 18px 0 8px;
+}
+
+.section-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: 22px 0 4px;
+}
+
+.section-title h2 {
+  font-size: 16px;
+  margin: 0;
+}
+
+/* Forms -------------------------------------------------------------- */
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin-bottom: 12px;
+}
+
+.field label {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.field .hint {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+input,
+select,
+textarea {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 8px;
+  padding: 10px 12px;
+  width: 100%;
+}
+
+input:focus,
+select:focus,
+textarea:focus {
+  outline: none;
+  border-color: var(--accent-dim);
+}
+
+textarea {
+  resize: vertical;
+  min-height: 64px;
+}
+
+.row {
+  display: flex;
+  gap: 12px;
+}
+
+.row > * {
+  flex: 1;
+}
+
+.grid-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.seg {
+  display: flex;
+  gap: 0;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.seg button {
+  flex: 1;
+  min-width: 0; /* allow flex items to shrink below their text width */
+  background: var(--surface-2);
+  color: var(--muted);
+  border: none;
+  padding: 10px 8px;
+  font-size: 13px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.seg button.active {
+  background: var(--accent-dim);
+  color: var(--text);
+}
+
+/* Buttons ------------------------------------------------------------ */
+.btn {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 8px;
+  padding: 10px 14px;
+}
+
+.btn.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #05130c;
+  font-weight: 600;
+}
+
+.btn.ghost {
+  background: none;
+  border-color: var(--border);
+}
+
+.btn.danger {
+  background: none;
+  border-color: transparent;
+  color: var(--danger);
+}
+
+.btn.block {
+  width: 100%;
+}
+
+.btn-row {
+  display: flex;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+/* Stepper counter ---------------------------------------------------- */
+.stepper {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 6px 8px;
+}
+
+.stepper .label {
+  font-weight: 600;
+  padding-left: 6px;
+}
+
+.stepper .controls {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.stepper button {
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  font-size: 18px;
+  line-height: 1;
+}
+
+.stepper .count {
+  min-width: 28px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  font-size: 16px;
+}
+
+/* Info / badges ------------------------------------------------------ */
+.calc {
+  background: var(--surface-2);
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.calc strong {
+  color: var(--accent);
+}
+
+.badge {
+  display: inline-block;
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  color: var(--muted);
+}
+
+.badge.compressed {
+  color: var(--warn);
+  border-color: var(--warn);
+}
+
+.badge.weekend {
+  color: #6ba7e5;
+  border-color: #3a5a7e;
+}
+
+.badge.gym {
+  color: var(--text);
+}
+
+.badges {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+/* Project line in history ------------------------------------------- */
+.project-line {
+  margin-top: 10px;
+  font-size: 13px;
+  color: var(--muted);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 12px;
+}
+
+.project-line.sent {
+  color: var(--text);
+  border-color: var(--accent-dim);
+  background: rgba(76, 195, 138, 0.12);
+}
+
+.project-line.sent b {
+  color: var(--accent);
+}
+
+/* Grade colour rows (Settings) -------------------------------------- */
+.grade-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 10px 0 0;
+}
+
+.grade-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.grade-row .grade-name {
+  font-weight: 600;
+  min-width: 40px;
+}
+
+.grade-row select {
+  flex: 1;
+  text-transform: capitalize;
+}
+
+.swatch.lg {
+  width: 18px;
+  height: 18px;
+  border-radius: 5px;
+  border: 1px solid var(--border);
+  flex: 0 0 auto;
+}
+
+.flag {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  background: rgba(76, 195, 138, 0.12);
+  border: 1px solid var(--accent-dim);
+  border-radius: var(--radius);
+  padding: 12px 14px;
+  margin: 12px 0;
+}
+
+.flag .icon {
+  font-size: 18px;
+}
+
+.flag .body {
+  font-size: 13px;
+}
+
+.flag .body strong {
+  color: var(--accent);
+}
+
+/* List items --------------------------------------------------------- */
+.entry {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 12px 14px;
+  margin: 10px 0;
+}
+
+.entry-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.entry-head .date {
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.entry-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+  margin-top: 8px;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.entry-meta b {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.entry-notes {
+  margin-top: 8px;
+  font-size: 13px;
+  color: var(--muted);
+  white-space: pre-wrap;
+}
+
+.entry-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.empty {
+  text-align: center;
+  color: var(--muted);
+  padding: 40px 16px;
+  font-size: 14px;
+}
+
+.filter-bar {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin: 8px 0 4px;
+}
+
+.filter-bar button {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--muted);
+  border-radius: 999px;
+  padding: 6px 12px;
+  font-size: 12px;
+}
+
+.filter-bar button.active {
+  color: var(--text);
+  border-color: var(--accent-dim);
+  background: var(--surface-2);
+}
+
+.muted {
+  color: var(--muted);
+}
+
+.chart-wrap {
+  width: 100%;
+  height: 260px;
+}
+
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  font-size: 12px;
+  color: var(--muted);
+  margin-top: 8px;
+}
+
+.legend .swatch {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+  margin-right: 5px;
+  vertical-align: middle;
+}
+
+.inline-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 4px 6px 4px 12px;
+  font-size: 13px;
+}
+
+.chip button {
+  background: none;
+  border: none;
+  color: var(--muted);
+  font-size: 16px;
+  line-height: 1;
+  padding: 0 4px;
+}
+
+.toast {
+  position: fixed;
+  bottom: 84px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--accent);
+  color: #05130c;
+  font-weight: 600;
+  font-size: 13px;
+  padding: 10px 18px;
+  border-radius: 999px;
+  z-index: 50;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
+}
