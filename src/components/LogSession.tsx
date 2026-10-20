@@ -1,21 +1,24 @@
 import { useMemo, useState } from "react";
 import {
   AppData,
+  BoulderLog,
   GradeCount,
   Session,
   SessionType,
+  TrackedProject,
   WeekendSession,
   WorkdaySession,
 } from "../types";
 import { Actions, newId } from "../lib/storage";
 import {
   bodyweightOnOrBefore,
-  lastProjectName,
   loadPercentBW,
   progressionStatus,
 } from "../lib/calculations";
+import { RPE_LABELS } from "../lib/boulders";
 import { pct, signed, todayISO } from "../lib/format";
-import { Field, NumberInput, Segmented, Stepper } from "./ui";
+import { ChipToggle, Field, NumberInput, Segmented } from "./ui";
+import BoulderingBlock from "./BoulderingBlock";
 
 /** Gym picker: a select over the saved gyms with an inline "add new" option. */
 function GymField({
@@ -96,61 +99,64 @@ function GymField({
   );
 }
 
-/** Project boulder field: name + "sent" toggle + copy-from-last shortcut. */
-function ProjectField({
-  name,
-  sent,
-  onName,
-  onSent,
-  lastName,
+/** Whole-session effort, 0 (light) to 5 (limit). Tap the active chip to clear. */
+function RpeField({
+  value,
+  onChange,
 }: {
-  name: string;
-  sent: boolean;
-  onName: (v: string) => void;
-  onSent: (v: boolean) => void;
-  lastName?: string;
+  value: number | undefined;
+  onChange: (v: number | undefined) => void;
 }) {
   return (
     <>
-      <h3>Project boulder</h3>
-      <div className="row">
-        <input
-          value={name}
-          placeholder="e.g. blue V5 on the cave wall"
-          onChange={(e) => onName(e.target.value)}
-        />
-        {lastName && !name.trim() && (
-          <button
-            type="button"
-            className="btn ghost"
-            style={{ flex: "0 0 auto" }}
-            title={`Copy: ${lastName}`}
-            onClick={() => onName(lastName)}
-          >
-            Copy last
-          </button>
+      <h3>
+        Session RPE
+        {value != null && (
+          <span className="rpe-label">
+            {" "}
+            · {value} {RPE_LABELS[value]}
+          </span>
         )}
-      </div>
-      {name.trim() && (
-        <div className="btn-row" style={{ marginTop: 8 }}>
-          <button
-            type="button"
-            className={sent ? "btn primary" : "btn"}
-            onClick={() => onSent(!sent)}
+      </h3>
+      <div className="chip-row">
+        {RPE_LABELS.map((label, i) => (
+          <ChipToggle
+            key={label}
+            active={value === i}
+            onClick={() => onChange(value === i ? undefined : i)}
           >
-            {sent ? "🎉 Project sent" : "Mark as sent"}
-          </button>
-        </div>
-      )}
+            {i}
+          </ChipToggle>
+        ))}
+      </div>
+      <p className="hint" style={{ marginTop: 6 }}>
+        How hard the whole session felt: 0 light · 1 easy · 2 moderate · 3 hard ·
+        4 very hard · 5 limit.
+      </p>
     </>
   );
+}
+
+/**
+ * Projects created while logging are saved with the session — but only the
+ * ones a boulder still links to, so an abandoned "Track" leaves nothing behind.
+ */
+function projectsToSave(
+  newProjects: TrackedProject[],
+  boulders: BoulderLog[],
+  gym: string,
+): TrackedProject[] {
+  return newProjects
+    .filter((p) => boulders.some((b) => b.projectId === p.id))
+    .map((p) => ({ ...p, gym: p.gym ?? (gym || undefined) }));
 }
 
 interface Props {
   data: AppData;
   actions: Actions;
   editing?: Session;
-  onDone: () => void;
+  onDone: () => void; // after a save
+  onCancel: () => void; // discard without saving
 }
 
 function emptyGrades(grades: string[]): GradeCount[] {
@@ -168,7 +174,13 @@ function mergeGrades(grades: string[], existing: GradeCount[]): GradeCount[] {
   return base;
 }
 
-export default function LogSession({ data, actions, editing, onDone }: Props) {
+export default function LogSession({
+  data,
+  actions,
+  editing,
+  onDone,
+  onCancel,
+}: Props) {
   const [kind, setKind] = useState<Session["kind"]>(editing?.kind ?? "workday");
 
   return (
@@ -196,6 +208,7 @@ export default function LogSession({ data, actions, editing, onDone }: Props) {
           actions={actions}
           editing={editing?.kind === "workday" ? editing : undefined}
           onDone={onDone}
+          onCancel={onCancel}
         />
       ) : (
         <WeekendForm
@@ -203,6 +216,7 @@ export default function LogSession({ data, actions, editing, onDone }: Props) {
           actions={actions}
           editing={editing?.kind === "weekend" ? editing : undefined}
           onDone={onDone}
+          onCancel={onCancel}
         />
       )}
     </div>
@@ -214,11 +228,13 @@ function WorkdayForm({
   actions,
   editing,
   onDone,
+  onCancel,
 }: {
   data: AppData;
   actions: Actions;
   editing?: WorkdaySession;
   onDone: () => void;
+  onCancel: () => void;
 }) {
   const unit = data.unit;
 
@@ -241,22 +257,14 @@ function WorkdayForm({
     editing?.mainHang?.setsCompleted ?? 6,
   );
 
-  // Activation (optional, lightly tracked)
-  const [showActivation, setShowActivation] = useState(!!editing?.activation);
-  const [actSets, setActSets] = useState<number | undefined>(
-    editing?.activation?.sets ?? 3,
-  );
-  const [actSecs, setActSecs] = useState<number | undefined>(
-    editing?.activation?.secondsPerHang ?? 7,
-  );
-  const [actEffort, setActEffort] = useState<number | undefined>(
-    editing?.activation?.effortPct ?? 50,
-  );
-
-  // Grades
+  // Bouldering block: counters, detailed boulders, projects tracked this session
   const [grades, setGrades] = useState<GradeCount[]>(
     editing ? mergeGrades(data.grades, editing.grades) : emptyGrades(data.grades),
   );
+  const [boulders, setBoulders] = useState<BoulderLog[]>(
+    editing?.boulders ?? [],
+  );
+  const [newProjects, setNewProjects] = useState<TrackedProject[]>([]);
 
   // Accessory / pull-ups (optional)
   const [showAccessory, setShowAccessory] = useState(!!editing?.accessory);
@@ -274,6 +282,7 @@ function WorkdayForm({
   );
 
   const [notes, setNotes] = useState(editing?.notes ?? "");
+  const [rpe, setRpe] = useState<number | undefined>(editing?.rpe);
 
   const [gym, setGym] = useState(editing?.gym ?? "");
 
@@ -281,14 +290,6 @@ function WorkdayForm({
   // A skipped session stores no mainHang, so it never appears in the
   // progression graph or the progression streak.
   const [skipMainHang, setSkipMainHang] = useState(!!editing && !editing.mainHang);
-
-  const [projectName, setProjectName] = useState(editing?.project?.name ?? "");
-  const [projectSent, setProjectSent] = useState(editing?.project?.sent ?? false);
-
-  const lastProject = useMemo(
-    () => lastProjectName(data.sessions, editing?.id),
-    [data.sessions, editing?.id],
-  );
 
   const bw = useMemo(
     () => bodyweightOnOrBefore(data.bodyweights, date),
@@ -305,12 +306,6 @@ function WorkdayForm({
       ? loadPercentBW(bw.weight, accAdded)
       : undefined;
 
-  function setGrade(grade: string, count: number) {
-    setGrades((prev) =>
-      prev.map((g) => (g.grade === grade ? { ...g, count } : g)),
-    );
-  }
-
   function save() {
     const session: WorkdaySession = {
       id: editing?.id ?? newId(),
@@ -319,9 +314,8 @@ function WorkdayForm({
       sessionType,
       gym: gym || undefined,
       grades: grades.filter((g) => g.count > 0 || data.grades.includes(g.grade)),
-      project: projectName.trim()
-        ? { name: projectName.trim(), sent: projectSent }
-        : undefined,
+      boulders: boulders.length > 0 ? boulders : undefined,
+      rpe,
       notes: notes.trim() || undefined,
     };
 
@@ -333,13 +327,6 @@ function WorkdayForm({
         setsCompleted: setsCompleted ?? 0,
       };
     }
-    if (showActivation && actSets != null) {
-      session.activation = {
-        sets: actSets,
-        secondsPerHang: actSecs ?? 0,
-        effortPct: actEffort ?? 0,
-      };
-    }
     if (showAccessory && accReps != null) {
       session.accessory = {
         type: accType,
@@ -349,7 +336,7 @@ function WorkdayForm({
       };
     }
 
-    actions.upsertSession(session);
+    actions.saveSession(session, projectsToSave(newProjects, boulders, gym));
     onDone();
   }
 
@@ -497,51 +484,17 @@ function WorkdayForm({
         </div>
       )}
 
-      <h3>
-        Activation hangs{" "}
-        <button
-          className="btn ghost"
-          style={{ padding: "2px 8px", fontSize: 12 }}
-          onClick={() => setShowActivation((s) => !s)}
-        >
-          {showActivation ? "hide" : "add"}
-        </button>
-      </h3>
-      {showActivation && (
-        <div className="row">
-          <Field label="Sets">
-            <NumberInput value={actSets} onChange={setActSets} min={0} />
-          </Field>
-          <Field label="Secs / hang">
-            <NumberInput value={actSecs} onChange={setActSecs} min={0} />
-          </Field>
-          <Field label="Effort %">
-            <NumberInput value={actEffort} onChange={setActEffort} min={0} />
-          </Field>
-        </div>
-      )}
-
       <h3>Bouldering block</h3>
-      <div className="grid-2">
-        {grades.map((g) => (
-          <Stepper
-            key={g.grade}
-            label={g.grade}
-            value={g.count}
-            onChange={(v) => setGrade(g.grade, v)}
-          />
-        ))}
-      </div>
-      <p className="hint" style={{ marginTop: 6 }}>
-        Edit the grade list in Settings.
-      </p>
-
-      <ProjectField
-        name={projectName}
-        sent={projectSent}
-        onName={setProjectName}
-        onSent={setProjectSent}
-        lastName={lastProject}
+      <BoulderingBlock
+        data={data}
+        grades={grades}
+        setGrades={setGrades}
+        boulders={boulders}
+        setBoulders={setBoulders}
+        newProjects={newProjects}
+        setNewProjects={setNewProjects}
+        gym={gym}
+        date={date}
       />
 
       <h3>
@@ -587,6 +540,8 @@ function WorkdayForm({
         </>
       )}
 
+      <RpeField value={rpe} onChange={setRpe} />
+
       <h3>Notes</h3>
       <textarea
         value={notes}
@@ -598,7 +553,7 @@ function WorkdayForm({
         <button className="btn primary block" onClick={save}>
           {editing ? "Save changes" : "Save session"}
         </button>
-        <button className="btn ghost" onClick={onDone}>
+        <button className="btn ghost" onClick={onCancel}>
           Cancel
         </button>
       </div>
@@ -611,51 +566,45 @@ function WeekendForm({
   actions,
   editing,
   onDone,
+  onCancel,
 }: {
   data: AppData;
   actions: Actions;
   editing?: WeekendSession;
   onDone: () => void;
+  onCancel: () => void;
 }) {
   const [date, setDate] = useState(editing?.date ?? todayISO());
   const [notes, setNotes] = useState(editing?.notes ?? "");
   const [gym, setGym] = useState(editing?.gym ?? "");
+  const [rpe, setRpe] = useState<number | undefined>(editing?.rpe);
   const [showGrades, setShowGrades] = useState(
-    !!editing?.grades?.some((g) => g.count > 0),
+    !!editing?.grades?.some((g) => g.count > 0) || !!editing?.boulders?.length,
   );
   const [grades, setGrades] = useState<GradeCount[]>(
     editing?.grades
       ? mergeGrades(data.grades, editing.grades)
       : emptyGrades(data.grades),
   );
-  const [projectName, setProjectName] = useState(editing?.project?.name ?? "");
-  const [projectSent, setProjectSent] = useState(editing?.project?.sent ?? false);
-
-  const lastProject = useMemo(
-    () => lastProjectName(data.sessions, editing?.id),
-    [data.sessions, editing?.id],
+  const [boulders, setBoulders] = useState<BoulderLog[]>(
+    editing?.boulders ?? [],
   );
-
-  function setGrade(grade: string, count: number) {
-    setGrades((prev) =>
-      prev.map((g) => (g.grade === grade ? { ...g, count } : g)),
-    );
-  }
+  const [newProjects, setNewProjects] = useState<TrackedProject[]>([]);
 
   function save() {
     const logged = grades.filter((g) => g.count > 0);
+    const keptBoulders = showGrades ? boulders : [];
     const session: WeekendSession = {
       id: editing?.id ?? newId(),
       kind: "weekend",
       date,
       gym: gym || undefined,
       grades: showGrades && logged.length > 0 ? logged : undefined,
-      project: projectName.trim()
-        ? { name: projectName.trim(), sent: projectSent }
-        : undefined,
+      boulders: keptBoulders.length > 0 ? keptBoulders : undefined,
+      rpe,
       notes: notes.trim() || undefined,
     };
-    actions.upsertSession(session);
+    actions.saveSession(session, projectsToSave(newProjects, keptBoulders, gym));
     onDone();
   }
 
@@ -678,40 +627,32 @@ function WeekendForm({
 
       <h3>
         Bouldering block{" "}
-        <button
-          className="btn ghost"
-          style={{ padding: "2px 8px", fontSize: 12 }}
-          onClick={() => setShowGrades((s) => !s)}
-        >
-          {showGrades ? "hide" : "add"}
-        </button>
+        {/* Can't hide the block while it holds detailed boulders. */}
+        {!(showGrades && boulders.length > 0) && (
+          <button
+            className="btn ghost"
+            style={{ padding: "2px 8px", fontSize: 12 }}
+            onClick={() => setShowGrades((s) => !s)}
+          >
+            {showGrades ? "hide" : "add"}
+          </button>
+        )}
       </h3>
       {showGrades && (
-        <>
-          <div className="grid-2">
-            {grades.map((g) => (
-              <Stepper
-                key={g.grade}
-                label={g.grade}
-                value={g.count}
-                onChange={(v) => setGrade(g.grade, v)}
-              />
-            ))}
-          </div>
-          <p className="hint" style={{ marginTop: 6 }}>
-            Optional — counts here feed the grade-volume chart alongside work-day
-            sessions.
-          </p>
-        </>
+        <BoulderingBlock
+          data={data}
+          grades={grades}
+          setGrades={setGrades}
+          boulders={boulders}
+          setBoulders={setBoulders}
+          newProjects={newProjects}
+          setNewProjects={setNewProjects}
+          gym={gym}
+          date={date}
+        />
       )}
 
-      <ProjectField
-        name={projectName}
-        sent={projectSent}
-        onName={setProjectName}
-        onSent={setProjectSent}
-        lastName={lastProject}
-      />
+      <RpeField value={rpe} onChange={setRpe} />
 
       <h3>Notes</h3>
       <textarea
@@ -724,7 +665,7 @@ function WeekendForm({
         <button className="btn primary block" onClick={save}>
           {editing ? "Save changes" : "Save session"}
         </button>
-        <button className="btn ghost" onClick={onDone}>
+        <button className="btn ghost" onClick={onCancel}>
           Cancel
         </button>
       </div>

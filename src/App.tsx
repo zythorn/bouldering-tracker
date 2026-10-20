@@ -46,6 +46,11 @@ export default function App() {
     setTab("history");
   }
 
+  function cancelLog() {
+    setEditing(undefined);
+    setTab("history");
+  }
+
   return (
     <div className="app">
       <header className="app-header">
@@ -72,6 +77,7 @@ export default function App() {
             actions={actions}
             editing={editing}
             onDone={finishLog}
+            onCancel={cancelLog}
           />
         </>
       )}

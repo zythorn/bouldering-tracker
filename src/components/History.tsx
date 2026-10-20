@@ -1,16 +1,62 @@
 import { useMemo, useState } from "react";
-import { AppData, Session } from "../types";
+import { AppData, BoulderLog, Session } from "../types";
 import { Actions } from "../lib/storage";
 import {
   bodyweightOnOrBefore,
   loadPercentBW,
   totalBoulders,
 } from "../lib/calculations";
+import {
+  RPE_LABELS,
+  attemptsText,
+  describeLog,
+  isSend,
+  logAttempts,
+  plural,
+  projectStats,
+} from "../lib/boulders";
 import { formatDate, pct, signed } from "../lib/format";
+import { Segmented } from "./ui";
+import Projects from "./Projects";
 
 type Filter = "all" | "workday" | "weekend" | "compressed-rest";
 
 export default function History({
+  data,
+  actions,
+  onEdit,
+}: {
+  data: AppData;
+  actions: Actions;
+  onEdit: (s: Session) => void;
+}) {
+  const [view, setView] = useState<"sessions" | "projects">("sessions");
+
+  return (
+    <div>
+      <div className="section-title">
+        <h2>History</h2>
+      </div>
+      <div style={{ margin: "8px 0" }}>
+        <Segmented
+          value={view}
+          onChange={setView}
+          options={[
+            { value: "sessions", label: `Sessions (${data.sessions.length})` },
+            { value: "projects", label: `Projects (${data.projects.length})` },
+          ]}
+        />
+      </div>
+      {view === "sessions" ? (
+        <SessionList data={data} actions={actions} onEdit={onEdit} />
+      ) : (
+        <Projects data={data} actions={actions} />
+      )}
+    </div>
+  );
+}
+
+function SessionList({
   data,
   actions,
   onEdit,
@@ -44,11 +90,6 @@ export default function History({
 
   return (
     <div>
-      <div className="section-title">
-        <h2>History</h2>
-        <span className="muted">{sessions.length} sessions</span>
-      </div>
-
       <div className="filter-bar">
         {filters.map((f) => (
           <button
@@ -99,6 +140,11 @@ function SessionCard({
         <span className="date">{formatDate(session.date)}</span>
         <span className="badges">
           {session.gym && <span className="badge gym">📍 {session.gym}</span>}
+          {session.rpe != null && (
+            <span className="badge">
+              RPE {session.rpe} · {RPE_LABELS[session.rpe]}
+            </span>
+          )}
           {session.kind === "weekend" ? (
             <span className="badge weekend">Weekend</span>
           ) : session.sessionType === "compressed-rest" ? (
@@ -181,10 +227,11 @@ function SessionCard({
         </>
       )}
 
-      {session.project && (
-        <div className={`project-line ${session.project.sent ? "sent" : ""}`}>
-          {session.project.sent ? "🎉 Project sent" : "🧗 Project"}:{" "}
-          <b>{session.project.name}</b>
+      {session.boulders && session.boulders.length > 0 && (
+        <div className="boulder-list">
+          {session.boulders.map((b) => (
+            <LoggedBoulder key={b.id} log={b} session={session} data={data} />
+          ))}
         </div>
       )}
 
@@ -196,6 +243,51 @@ function SessionCard({
           Delete
         </button>
       </div>
+    </div>
+  );
+}
+
+/**
+ * One detailed boulder in a session card. Project work also shows the running
+ * total up to this session, e.g. "5 attempts today · 26 so far over 3 sessions".
+ */
+function LoggedBoulder({
+  log,
+  session,
+  data,
+}: {
+  log: BoulderLog;
+  session: Session;
+  data: AppData;
+}) {
+  const project = data.projects.find((p) => p.id === log.projectId);
+  if (!project) {
+    return (
+      <div className={`boulder-item ${isSend(log) ? "" : "unsent"}`}>
+        {describeLog(log)}
+        {log.notes && <div className="muted">{log.notes}</div>}
+      </div>
+    );
+  }
+
+  const sent = isSend(log);
+  const sofar = projectStats(data.sessions, project.id, session.date);
+  const total = attemptsText(sofar);
+  // Entries migrated from the old project field carry no grade or attempts.
+  const detail =
+    log.grade || logAttempts(log) != null ? describeLog(log) : undefined;
+
+  return (
+    <div className={`project-line ${sent ? "sent" : ""}`}>
+      {sent ? "🎉 Project sent" : "🧗 Project"}: <b>{project.name}</b>
+      {detail && <div>{detail}</div>}
+      {total && (
+        <div className="muted">
+          {sent ? "Took" : "So far"} {total} over{" "}
+          {plural(sofar.sessions, "session")}
+        </div>
+      )}
+      {log.notes && <div className="muted">{log.notes}</div>}
     </div>
   );
 }

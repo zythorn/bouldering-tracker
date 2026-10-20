@@ -301,6 +301,154 @@ textarea {
   font-size: 16px;
 }
 
+.stepper button:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+/* Grade label doubling as the "add detail" button */
+.stepper .label-btn {
+  width: auto;
+  height: auto;
+  border: none;
+  background: none;
+  font-size: 15px;
+  font-weight: 600;
+  padding: 6px 4px 6px 6px;
+  color: var(--text);
+}
+
+.stepper .label-btn .plus {
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 400;
+}
+
+.stepper .label {
+  white-space: nowrap;
+}
+
+/* On phones the half-width counters are tight: shrink the controls a little
+   so "V5 ＋" stays on one line. */
+@media (max-width: 420px) {
+  .stepper {
+    padding: 6px;
+  }
+  .stepper .controls {
+    gap: 2px;
+  }
+  .stepper .controls button {
+    width: 30px;
+    height: 32px;
+  }
+  .stepper .count {
+    min-width: 20px;
+  }
+  .stepper .label-btn {
+    padding: 6px 2px 6px 4px;
+  }
+}
+
+/* Toggle chips (tags, feel, RPE, grade picker) ----------------------- */
+.chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.chip-toggle {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  color: var(--muted);
+  border-radius: 999px;
+  padding: 7px 13px;
+  font-size: 13px;
+  min-width: 40px;
+}
+
+.chip-toggle.active {
+  background: var(--accent-dim);
+  border-color: var(--accent);
+  color: var(--text);
+}
+
+.rpe-label {
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--accent);
+}
+
+/* Detailed boulders -------------------------------------------------- */
+.boulder-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.boulder-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  text-align: left;
+  font-size: 13px;
+  color: var(--text);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--accent);
+  border-radius: 8px;
+  padding: 8px 12px;
+}
+
+.boulder-item.unsent {
+  border-left-color: var(--muted);
+  color: var(--muted);
+}
+
+.boulder-item .proj {
+  font-weight: 600;
+  color: var(--text);
+}
+
+.boulder-list .project-line {
+  margin-top: 0;
+}
+
+/* Bottom sheet ------------------------------------------------------- */
+.sheet-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  background: rgba(0, 0, 0, 0.55);
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+}
+
+.sheet {
+  width: 100%;
+  max-width: var(--maxw);
+  max-height: 88vh;
+  overflow-y: auto;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-bottom: none;
+  border-radius: 16px 16px 0 0;
+  padding: 16px 16px calc(16px + env(safe-area-inset-bottom));
+}
+
+.sheet-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.sheet-head h2 {
+  font-size: 16px;
+  margin: 0;
+}
+
 /* Info / badges ------------------------------------------------------ */
 .calc {
   background: var(--surface-2);

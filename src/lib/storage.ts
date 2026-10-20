@@ -1,19 +1,77 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { AppData, DEFAULT_DATA } from "../types";
+import { AppData, DEFAULT_DATA, Session, TrackedProject } from "../types";
 
 const STORAGE_KEY = "bouldering-training-log:v1";
+
+// Fields older versions stored on sessions that the current model replaced.
+type LegacySession = Session & {
+  project?: { name?: string; sent?: boolean };
+  activation?: unknown;
+};
+
+/**
+ * Bring stored or imported data up to the current model. Safe to run on
+ * already-migrated data (it then only fills in defaults).
+ *
+ * - Old per-session `project: {name, sent}` entries become TrackedProjects
+ *   (grouped by name), with a linked BoulderLog on each session. The old field
+ *   never recorded a grade or attempts, so those stay empty.
+ * - Activation-hang data is dropped (the feature was removed).
+ */
+export function migrate(raw: Partial<AppData>): AppData {
+  const data: AppData = {
+    ...DEFAULT_DATA,
+    ...raw,
+    grades: raw.grades?.length ? raw.grades : DEFAULT_DATA.grades,
+    sessions: raw.sessions ?? [],
+    projects: raw.projects ?? [],
+  };
+
+  const byName = new Map<string, TrackedProject>(
+    data.projects.map((p) => [p.name.trim().toLowerCase(), p]),
+  );
+
+  // Oldest first, so each project gets the gym and date it was first worked.
+  const ordered = [...data.sessions].sort((a, b) =>
+    a.date.localeCompare(b.date),
+  );
+  for (const s of ordered as LegacySession[]) {
+    delete s.activation;
+    const old = s.project;
+    delete s.project;
+    const name = old?.name?.trim();
+    if (!name) continue;
+
+    let project = byName.get(name.toLowerCase());
+    if (!project) {
+      project = {
+        id: newId(),
+        name,
+        gym: s.gym,
+        tags: [],
+        createdDate: s.date,
+      };
+      byName.set(name.toLowerCase(), project);
+      data.projects.push(project);
+    }
+    s.boulders = [
+      ...(s.boulders ?? []),
+      {
+        id: newId(),
+        outcome: old?.sent ? "send" : "attempt",
+        tags: [],
+        projectId: project.id,
+      },
+    ];
+  }
+  return data;
+}
 
 function load(): AppData {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return DEFAULT_DATA;
-    const parsed = JSON.parse(raw) as Partial<AppData>;
-    // Merge with defaults so older/partial payloads stay valid.
-    return {
-      ...DEFAULT_DATA,
-      ...parsed,
-      grades: parsed.grades?.length ? parsed.grades : DEFAULT_DATA.grades,
-    };
+    return migrate(JSON.parse(raw) as Partial<AppData>);
   } catch {
     return DEFAULT_DATA;
   }
@@ -91,6 +149,39 @@ export function useAppData() {
       deleteSession: (id: string) =>
         update((d) => {
           d.sessions = d.sessions.filter((s) => s.id !== id);
+          return d;
+        }),
+      /** Save a session together with any projects created while logging it. */
+      saveSession: (
+        session: AppData["sessions"][number],
+        newProjects: TrackedProject[] = [],
+      ) =>
+        update((d) => {
+          for (const p of newProjects) {
+            if (!d.projects.some((x) => x.id === p.id)) d.projects.push(p);
+          }
+          const i = d.sessions.findIndex((s) => s.id === session.id);
+          if (i >= 0) d.sessions[i] = session;
+          else d.sessions.push(session);
+          return d;
+        }),
+
+      upsertProject: (project: TrackedProject) =>
+        update((d) => {
+          const i = d.projects.findIndex((p) => p.id === project.id);
+          if (i >= 0) d.projects[i] = project;
+          else d.projects.push(project);
+          return d;
+        }),
+      /** Delete a project; its logs stay as plain detailed boulders. */
+      deleteProject: (id: string) =>
+        update((d) => {
+          d.projects = d.projects.filter((p) => p.id !== id);
+          for (const s of d.sessions) {
+            for (const b of s.boulders ?? []) {
+              if (b.projectId === id) delete b.projectId;
+            }
+          }
           return d;
         }),
 

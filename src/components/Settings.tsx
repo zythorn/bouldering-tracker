@@ -1,6 +1,6 @@
 import { useRef, useState } from "react";
-import { AppData, DEFAULT_DATA, Unit } from "../types";
-import { Actions } from "../lib/storage";
+import { AppData, Unit } from "../types";
+import { Actions, migrate } from "../lib/storage";
 import { GRADE_COLOR_NAMES, gradeFill } from "../lib/colors";
 import { Field, Segmented } from "./ui";
 
@@ -61,7 +61,7 @@ export default function Settings({
             "Replace all current data with the imported file? This cannot be undone.",
           )
         ) {
-          actions.replaceAll({ ...DEFAULT_DATA, ...parsed });
+          actions.replaceAll(migrate(parsed));
         }
       } catch {
         alert("Could not read that file — is it a valid export?");

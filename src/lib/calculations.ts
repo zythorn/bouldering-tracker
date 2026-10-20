@@ -73,16 +73,3 @@ export function progressionStatus(
 export function totalBoulders(s: WorkdaySession): number {
   return s.grades.reduce((sum, g) => sum + (g.count || 0), 0);
 }
-
-/**
- * Name of the project on the most recent session that had one, ignoring
- * `excludeId` (the session currently being edited). Used by "Copy last project".
- */
-export function lastProjectName(
-  sessions: Session[],
-  excludeId?: string,
-): string | undefined {
-  return sessions
-    .filter((s) => s.id !== excludeId && s.project?.name)
-    .sort((a, b) => b.date.localeCompare(a.date))[0]?.project?.name;
-}

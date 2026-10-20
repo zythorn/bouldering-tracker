@@ -25,14 +25,20 @@ with `npm run build` and preview it with `npm run preview`.
 
 ```
 src/
-  types.ts               Data model (sessions, bodyweight, strength tests)
+  types.ts               Data model (sessions, boulders, projects, bodyweight…)
   lib/
-    storage.ts           useAppData() hook — state + localStorage + actions
+    storage.ts           useAppData() hook — state + localStorage + actions,
+                         and migrate() for older saved/exported data
     calculations.ts      %BW load, "most recent bodyweight", progression rule
+    boulders.ts          Boulder vocabulary (tags, feel, RPE) + derived
+                         project stats/status
     format.ts            Date / number formatting helpers
   components/
     LogSession.tsx       Work-day + weekend logging form (the quick-log flow)
-    History.tsx          Filterable list of past sessions (edit / delete)
+    BoulderingBlock.tsx  Grade counters + detailed boulders (shared by both forms)
+    BoulderSheet.tsx     Bottom sheet for logging one boulder in detail
+    History.tsx          Sessions list (filterable) / Projects toggle
+    Projects.tsx         Tracked projects: progress, edit, retire, delete
     Bodyweight.tsx       Bodyweight log
     StrengthTests.tsx    Periodic strength-test log
     Charts.tsx           Hangboard load, grade volume, pull-up trend charts
@@ -71,14 +77,39 @@ src/
   the hangboard graph or count toward the progression streak.
 - **Grade colours** — assign each grade a hold colour (white/yellow/green/blue/
   red/black/purple/orange) in Settings; the grade-volume chart uses it.
-- **Project boulder** — tag a session with a project, mark it sent (a "Project
-  sent" note shows in history), and one-tap "Copy last" to carry a project
-  forward from the most recent session that had one. Personal-only, not
-  aggregated anywhere.
+- **Detailed boulders** — tap a grade label ("V5 ＋") to log a single boulder:
+  outcome (flash / send / not sent), attempts, grade feel (soft / fair / hard)
+  and tags (slab / vertical / overhang; power / technical / dyno /
+  coordination), plus an optional note. Entirely optional — plain counters
+  still work as before. Counters remain the total of sends: a detailed send
+  adds 1 to its grade, and a counter can't drop below its detailed sends.
+  Unsent boulders never appear in the charts.
+- **Tracked projects** — mark a "not sent" boulder as a project with "Track as
+  project" (nothing is added automatically). Later sessions pick it from a list
+  (projects at the session's gym first) and attempts add up across sessions:
+  "Took 31 attempts over 4 sessions". Progress is derived from the logs, never
+  stored, so editing or deleting sessions keeps it correct. Projects not worked
+  in 6 weeks drop out of the picker; projects can also be retired. Browse them
+  under History → Projects.
+- **Session RPE** — one effort rating per session, 0 light · 1 easy ·
+  2 moderate · 3 hard · 4 very hard · 5 limit.
 - **JSON export / import** in Settings for backups / moving devices.
+
+## Data migrations
+
+`migrate()` in `lib/storage.ts` runs on load and on JSON import, so old data
+upgrades itself:
+
+- The old per-session `project: {name, sent}` field becomes tracked projects
+  (grouped by name), each session getting a linked boulder entry. The old field
+  never stored a grade or attempts, so those start empty.
+- Activation-hang data (feature removed) is dropped.
 
 ## Roadmap / future ideas
 
+- **Accessory / pull-ups rework** — the section is unchanged for now.
+- **Boulder analytics** — e.g. attempts-to-send by grade, or which tags cost
+  the most attempts.
 - **Multiple hang groups per session** — log mixed edges/loads in one session
   (e.g. 2 sets on 20mm + 4 sets on 33mm). Requires turning the single
   `mainHang` into a list, and teaching the progression streak and hangboard

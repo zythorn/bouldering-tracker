@@ -47,24 +47,43 @@ export function NumberInput({
   );
 }
 
-/** +/- stepper used for grade counters. */
+/**
+ * +/- stepper used for grade counters. `min` stops it going below a floor;
+ * `onLabelClick` turns the label into a button (used for "add detail").
+ */
 export function Stepper({
   label,
   value,
   onChange,
+  min = 0,
+  onLabelClick,
 }: {
   label: string;
   value: number;
   onChange: (v: number) => void;
+  min?: number;
+  onLabelClick?: () => void;
 }) {
   return (
     <div className="stepper">
-      <span className="label">{label}</span>
+      {onLabelClick ? (
+        <button
+          type="button"
+          className="label label-btn"
+          aria-label={`add detail for ${label}`}
+          onClick={onLabelClick}
+        >
+          {label} <span className="plus">＋</span>
+        </button>
+      ) : (
+        <span className="label">{label}</span>
+      )}
       <div className="controls">
         <button
           type="button"
           aria-label={`decrease ${label}`}
-          onClick={() => onChange(Math.max(0, value - 1))}
+          disabled={value <= min}
+          onClick={() => onChange(Math.max(min, value - 1))}
         >
           −
         </button>
@@ -78,6 +97,28 @@ export function Stepper({
         </button>
       </div>
     </div>
+  );
+}
+
+/** A pill that toggles on/off (used for tags, feel and RPE). */
+export function ChipToggle({
+  active,
+  onClick,
+  children,
+}: {
+  active: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      className={`chip-toggle ${active ? "active" : ""}`}
+      aria-pressed={active}
+      onClick={onClick}
+    >
+      {children}
+    </button>
   );
 }
 

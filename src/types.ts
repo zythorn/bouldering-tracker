@@ -13,12 +13,6 @@ export interface BodyweightEntry {
   weight: number;
 }
 
-export interface ActivationHangs {
-  sets: number;
-  secondsPerHang: number;
-  effortPct: number;
-}
-
 export interface MainHang {
   edgeMm: number;
   addedWeight: number; // signed; e.g. -5 means 5 removed via pulley
@@ -38,10 +32,45 @@ export interface Accessory {
   addedWeight?: number; // only for weighted
 }
 
-/** A boulder being projected across sessions. Personal-only, not aggregated. */
-export interface Project {
+export type BoulderTag =
+  | "slab"
+  | "vertical"
+  | "overhang"
+  | "power"
+  | "technical"
+  | "dyno";
+
+export type BoulderOutcome = "flash" | "send" | "attempt"; // attempt = not sent
+
+export type GradeFeel = "soft" | "fair" | "hard";
+
+/**
+ * A single boulder logged in detail within one session. Detailed sends are
+ * also included in that grade's counter, so counters stay the total.
+ */
+export interface BoulderLog {
+  id: string;
+  grade?: string; // absent only on entries migrated from the old project field
+  outcome: BoulderOutcome;
+  attempts?: number; // absent on migrated entries; a flash is always 1
+  feel?: GradeFeel;
+  tags: BoulderTag[];
+  notes?: string;
+  projectId?: string; // set when this was work on a tracked project
+}
+
+/**
+ * A boulder worked across sessions. Progress (attempts, sessions, sent date)
+ * is derived from the BoulderLogs that reference it, never stored here.
+ */
+export interface TrackedProject {
+  id: string;
   name: string;
-  sent: boolean;
+  grade?: string;
+  gym?: string;
+  tags: BoulderTag[];
+  createdDate: string;
+  retired?: boolean;
 }
 
 export interface WorkdaySession {
@@ -50,11 +79,11 @@ export interface WorkdaySession {
   date: string;
   sessionType: SessionType;
   gym?: string;
-  activation?: ActivationHangs;
   mainHang?: MainHang; // omitted entirely when main hangs are skipped this session
   grades: GradeCount[];
+  boulders?: BoulderLog[];
   accessory?: Accessory;
-  project?: Project;
+  rpe?: number; // session effort, 0 (light) to 5 (limit)
   notes?: string;
 }
 
@@ -64,7 +93,8 @@ export interface WeekendSession {
   date: string;
   gym?: string;
   grades?: GradeCount[];
-  project?: Project;
+  boulders?: BoulderLog[];
+  rpe?: number;
   notes?: string;
 }
 
@@ -90,6 +120,7 @@ export interface AppData {
   gyms: string[]; // editable list of gym names
   bodyweights: BodyweightEntry[];
   sessions: Session[];
+  projects: TrackedProject[];
   strengthTests: StrengthTest[];
 }
 
@@ -100,5 +131,6 @@ export const DEFAULT_DATA: AppData = {
   gyms: [],
   bodyweights: [],
   sessions: [],
+  projects: [],
   strengthTests: [],
 };
