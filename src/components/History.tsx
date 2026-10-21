@@ -133,6 +133,12 @@ function SessionCard({
   onDelete: () => void;
 }) {
   const unit = data.unit;
+  // Detailed boulders can make a card long, so they start collapsed.
+  const [showBoulders, setShowBoulders] = useState(false);
+  // Project sends stay visible in the collapsed summary.
+  const projectSends = (session.boulders ?? []).filter(
+    (b) => isSend(b) && data.projects.some((p) => p.id === b.projectId),
+  ).length;
 
   return (
     <div className="entry">
@@ -228,11 +234,36 @@ function SessionCard({
       )}
 
       {session.boulders && session.boulders.length > 0 && (
-        <div className="boulder-list">
-          {session.boulders.map((b) => (
-            <LoggedBoulder key={b.id} log={b} session={session} data={data} />
-          ))}
-        </div>
+        <>
+          <button
+            type="button"
+            className="details-toggle"
+            aria-expanded={showBoulders}
+            onClick={() => setShowBoulders((s) => !s)}
+          >
+            {showBoulders
+              ? "▾ Hide boulder details"
+              : `▸ ${plural(session.boulders.length, "boulder")} in detail`}
+            {!showBoulders && projectSends > 0 && (
+              <span className="sent-note">
+                {" "}
+                · 🎉 {plural(projectSends, "project")} sent
+              </span>
+            )}
+          </button>
+          {showBoulders && (
+            <div className="boulder-list">
+              {session.boulders.map((b) => (
+                <LoggedBoulder
+                  key={b.id}
+                  log={b}
+                  session={session}
+                  data={data}
+                />
+              ))}
+            </div>
+          )}
+        </>
       )}
 
       <div className="entry-actions">

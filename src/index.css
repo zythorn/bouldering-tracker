@@ -414,6 +414,22 @@ textarea {
   margin-top: 0;
 }
 
+/* Collapsed/expanded toggle for detailed boulders in history */
+.details-toggle {
+  display: block;
+  margin-top: 10px;
+  padding: 4px 0;
+  background: none;
+  border: none;
+  color: var(--muted);
+  font-size: 13px;
+  text-align: left;
+}
+
+.details-toggle .sent-note {
+  color: var(--accent);
+}
+
 /* Bottom sheet ------------------------------------------------------- */
 .sheet-backdrop {
   position: fixed;
