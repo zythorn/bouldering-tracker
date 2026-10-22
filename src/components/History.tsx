@@ -1,11 +1,23 @@
 import { useMemo, useState } from "react";
-import { AppData, BoulderLog, Session } from "../types";
+import {
+  AppData,
+  BoulderLog,
+  Session,
+  SessionType,
+  StrengthSession,
+  Unit,
+} from "../types";
 import { Actions } from "../lib/storage";
 import {
   bodyweightOnOrBefore,
+  isClimbing,
   loadPercentBW,
+  sessionBoulders,
+  sessionTypes,
   totalBoulders,
 } from "../lib/calculations";
+import { describePain, hasPainCheck, painAlerts } from "../lib/pain";
+import { prescriptionGaps } from "../lib/strength";
 import {
   RPE_LABELS,
   attemptsText,
@@ -19,7 +31,7 @@ import { formatDate, pct, signed } from "../lib/format";
 import { Segmented } from "./ui";
 import Projects from "./Projects";
 
-type Filter = "all" | "workday" | "weekend" | "compressed-rest";
+type Filter = "all" | "workday" | "weekend" | "strength" | "compressed-rest";
 
 export default function History({
   data,
@@ -71,20 +83,21 @@ function SessionList({
     () => [...data.sessions].sort((a, b) => b.date.localeCompare(a.date)),
     [data.sessions],
   );
+  // Effective normal/compressed-rest per work-day (derived from dates).
+  const types = useMemo(() => sessionTypes(data.sessions), [data.sessions]);
 
   const shown = sessions.filter((s) => {
     if (filter === "all") return true;
-    if (filter === "workday") return s.kind === "workday";
-    if (filter === "weekend") return s.kind === "weekend";
     if (filter === "compressed-rest")
-      return s.kind === "workday" && s.sessionType === "compressed-rest";
-    return true;
+      return types.get(s.id) === "compressed-rest";
+    return s.kind === filter;
   });
 
   const filters: { value: Filter; label: string }[] = [
     { value: "all", label: "All" },
     { value: "workday", label: "Work-day" },
     { value: "weekend", label: "Weekend" },
+    { value: "strength", label: "Core/hip" },
     { value: "compressed-rest", label: "Compressed" },
   ];
 
@@ -109,6 +122,7 @@ function SessionList({
           <SessionCard
             key={s.id}
             session={s}
+            sessionType={types.get(s.id)}
             data={data}
             onEdit={() => onEdit(s)}
             onDelete={() => {
@@ -123,11 +137,13 @@ function SessionList({
 
 function SessionCard({
   session,
+  sessionType,
   data,
   onEdit,
   onDelete,
 }: {
   session: Session;
+  sessionType?: SessionType; // effective type, work-day sessions only
   data: AppData;
   onEdit: () => void;
   onDelete: () => void;
@@ -135,25 +151,31 @@ function SessionCard({
   const unit = data.unit;
   // Detailed boulders can make a card long, so they start collapsed.
   const [showBoulders, setShowBoulders] = useState(false);
+  const boulders = sessionBoulders(session);
   // Project sends stay visible in the collapsed summary.
-  const projectSends = (session.boulders ?? []).filter(
+  const projectSends = boulders.filter(
     (b) => isSend(b) && data.projects.some((p) => p.id === b.projectId),
   ).length;
+  const painFlagged = painAlerts(session.pain).length > 0;
 
   return (
-    <div className="entry">
+    <div className={`entry ${painFlagged ? "pain-flagged" : ""}`}>
       <div className="entry-head">
         <span className="date">{formatDate(session.date)}</span>
         <span className="badges">
-          {session.gym && <span className="badge gym">📍 {session.gym}</span>}
-          {session.rpe != null && (
+          {isClimbing(session) && session.gym && (
+            <span className="badge gym">📍 {session.gym}</span>
+          )}
+          {isClimbing(session) && session.rpe != null && (
             <span className="badge">
               RPE {session.rpe} · {RPE_LABELS[session.rpe]}
             </span>
           )}
-          {session.kind === "weekend" ? (
+          {session.kind === "strength" ? (
+            <span className="badge core">Core/hip</span>
+          ) : session.kind === "weekend" ? (
             <span className="badge weekend">Weekend</span>
-          ) : session.sessionType === "compressed-rest" ? (
+          ) : sessionType === "compressed-rest" ? (
             <span className="badge compressed">Compressed rest</span>
           ) : (
             <span className="badge">Work-day</span>
@@ -161,7 +183,9 @@ function SessionCard({
         </span>
       </div>
 
-      {session.kind === "workday" ? (
+      {session.kind === "strength" ? (
+        <StrengthSummary session={session} unit={unit} />
+      ) : session.kind === "workday" ? (
         <>
           <div className="entry-meta">
             {session.mainHang &&
@@ -233,7 +257,13 @@ function SessionCard({
         </>
       )}
 
-      {session.boulders && session.boulders.length > 0 && (
+      {session.pain && hasPainCheck(session.pain) && (
+        <div className={`pain-line ${painFlagged ? "flagged" : ""}`}>
+          {painFlagged ? "⚠️ " : ""}Pain: {describePain(session.pain)}
+        </div>
+      )}
+
+      {boulders.length > 0 && (
         <>
           <button
             type="button"
@@ -243,7 +273,7 @@ function SessionCard({
           >
             {showBoulders
               ? "▾ Hide boulder details"
-              : `▸ ${plural(session.boulders.length, "boulder")} in detail`}
+              : `▸ ${plural(boulders.length, "boulder")} in detail`}
             {!showBoulders && projectSends > 0 && (
               <span className="sent-note">
                 {" "}
@@ -253,7 +283,7 @@ function SessionCard({
           </button>
           {showBoulders && (
             <div className="boulder-list">
-              {session.boulders.map((b) => (
+              {boulders.map((b) => (
                 <LoggedBoulder
                   key={b.id}
                   log={b}
@@ -275,6 +305,38 @@ function SessionCard({
         </button>
       </div>
     </div>
+  );
+}
+
+/** Core/hip checklist as one line, plus whether it matched the prescription. */
+function StrengthSummary({
+  session,
+  unit,
+}: {
+  session: StrengthSession;
+  unit: Unit;
+}) {
+  const gaps = prescriptionGaps(session, unit);
+  const { deadlift: dl, glutBridge: gb, sidePlank: sp } = session;
+  const done = [
+    session.breathing && "breathing ✓",
+    dl &&
+      `deadlift ${dl.sets ?? "?"}×${dl.reps ?? "?"}` +
+        (dl.weight != null ? ` @ ${dl.weight} ${unit}` : ""),
+    gb && `glute bridge ${gb.sets ?? "?"}×${gb.reps ?? "?"}/side`,
+    sp && `side plank ${sp.sets ?? "?"}×${sp.seconds ?? "?"} s/side`,
+  ].filter(Boolean);
+
+  return (
+    <>
+      <div className="entry-meta">
+        <span>{done.length ? done.join(" · ") : "Nothing ticked"}</span>
+      </div>
+      <div className={`prescribed ${gaps.length ? "" : "ok"}`}>
+        {gaps.length ? `Short of prescription: ${gaps.join(", ")}` : "✓ As prescribed"}
+      </div>
+      {session.notes && <div className="entry-notes">{session.notes}</div>}
+    </>
   );
 }
 

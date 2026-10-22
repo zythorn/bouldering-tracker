@@ -33,3 +33,24 @@ export function round(n: number, dp = 1): number {
 export function pct(n: number): string {
   return `${round(n)}%`;
 }
+
+// Calendar arithmetic on ISO dates. Done in UTC so DST shifts can't turn a
+// one-day gap into 0.96 or 1.04 days.
+const utc = (iso: string) => new Date(iso + "T00:00:00Z");
+
+/** Whole calendar days from `fromISO` to `toISO` (negative if earlier). */
+export function daysBetween(fromISO: string, toISO: string): number {
+  return Math.round((utc(toISO).getTime() - utc(fromISO).getTime()) / 86_400_000);
+}
+
+export function addDays(iso: string, n: number): string {
+  const d = utc(iso);
+  d.setUTCDate(d.getUTCDate() + n);
+  return d.toISOString().slice(0, 10);
+}
+
+/** The Monday of the (Mon–Sun) week containing `iso`. */
+export function weekStart(iso: string): string {
+  const weekday = (utc(iso).getUTCDay() + 6) % 7; // Mon = 0 … Sun = 6
+  return addDays(iso, -weekday);
+}

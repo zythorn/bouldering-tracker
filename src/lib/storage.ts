@@ -1,10 +1,13 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { AppData, DEFAULT_DATA, Session, TrackedProject } from "../types";
+import { AppData, ClimbingSession, DEFAULT_DATA, TrackedProject } from "../types";
+import { isClimbing, sessionBoulders } from "./calculations";
+import { todayISO } from "./format";
 
 const STORAGE_KEY = "bouldering-training-log:v1";
+const BACKUP_PREFIX = "bouldering-training-log:backup:";
 
 // Fields older versions stored on sessions that the current model replaced.
-type LegacySession = Session & {
+type LegacySession = ClimbingSession & {
   project?: { name?: string; sent?: boolean };
   activation?: unknown;
 };
@@ -35,7 +38,7 @@ export function migrate(raw: Partial<AppData>): AppData {
   const ordered = [...data.sessions].sort((a, b) =>
     a.date.localeCompare(b.date),
   );
-  for (const s of ordered as LegacySession[]) {
+  for (const s of ordered.filter(isClimbing) as LegacySession[]) {
     delete s.activation;
     const old = s.project;
     delete s.project;
@@ -71,10 +74,36 @@ function load(): AppData {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return DEFAULT_DATA;
-    return migrate(JSON.parse(raw) as Partial<AppData>);
+    const data = migrate(JSON.parse(raw) as Partial<AppData>);
+    // If migrating changed anything, keep the untouched original before the
+    // upgraded version is saved over it (one backup per day, never overwritten).
+    if (JSON.stringify(data) !== raw) {
+      const key = BACKUP_PREFIX + todayISO();
+      if (!localStorage.getItem(key)) localStorage.setItem(key, raw);
+    }
+    return data;
   } catch {
     return DEFAULT_DATA;
   }
+}
+
+/** Pre-upgrade backups kept by load(), newest first. */
+export function listBackups(): { date: string; raw: string }[] {
+  const out: { date: string; raw: string }[] = [];
+  try {
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key?.startsWith(BACKUP_PREFIX)) {
+        out.push({
+          date: key.slice(BACKUP_PREFIX.length),
+          raw: localStorage.getItem(key) ?? "",
+        });
+      }
+    }
+  } catch {
+    // Storage unavailable — no backups to show.
+  }
+  return out.sort((a, b) => b.date.localeCompare(a.date));
 }
 
 export function newId(): string {
@@ -178,7 +207,7 @@ export function useAppData() {
         update((d) => {
           d.projects = d.projects.filter((p) => p.id !== id);
           for (const s of d.sessions) {
-            for (const b of s.boulders ?? []) {
+            for (const b of sessionBoulders(s)) {
               if (b.projectId === id) delete b.projectId;
             }
           }

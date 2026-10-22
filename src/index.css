@@ -585,6 +585,135 @@ textarea {
   color: var(--accent);
 }
 
+/* Warning variant (pain banner, bodyweight shift) */
+.flag.warn {
+  background: rgba(217, 164, 65, 0.12);
+  border-color: var(--warn);
+}
+
+.flag.warn .body strong {
+  color: var(--warn);
+}
+
+/* One-line status under the header (core/hip counter, weigh-in reminder) */
+.status-line {
+  font-size: 13px;
+  color: var(--muted);
+  margin: 8px 0 4px;
+}
+
+.status-line .ok {
+  color: var(--accent);
+}
+
+/* Pain check ---------------------------------------------------------- */
+.pain-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.pain-label {
+  flex: 0 0 62px;
+  font-size: 13px;
+  line-height: 1.2;
+}
+
+/* Six 0–5 chips must fit on one line next to the label at phone width. */
+.pain-row .chip-row {
+  flex-wrap: nowrap;
+  gap: 4px;
+}
+
+.pain-row .chip-toggle {
+  min-width: 32px;
+  padding: 6px 0;
+}
+
+.chip-toggle.warn.active {
+  background: rgba(229, 83, 75, 0.25);
+  border-color: var(--danger);
+}
+
+.entry.pain-flagged {
+  border-left: 3px solid var(--danger);
+}
+
+.pain-line {
+  margin-top: 8px;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.pain-line.flagged {
+  color: var(--danger);
+}
+
+/* Core/hip ------------------------------------------------------------ */
+.badge.core {
+  color: #b77de5;
+  border-color: #5e4a78;
+}
+
+.prescribed {
+  margin-top: 6px;
+  font-size: 13px;
+  color: var(--warn);
+}
+
+.prescribed.ok {
+  color: var(--accent);
+}
+
+.exercise {
+  margin-bottom: 10px;
+}
+
+.check {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  font-size: 14px;
+  margin-bottom: 6px;
+}
+
+.check input {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--accent);
+}
+
+.link-btn {
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--accent);
+  font-size: inherit;
+  text-decoration: underline;
+}
+
+/* Card title with a control on the right (chart gym filter) */
+.card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.card-head h2 {
+  margin: 0;
+}
+
+select.compact {
+  width: auto;
+  max-width: 50%;
+  padding: 6px 10px;
+  font-size: 13px;
+}
+
 /* List items --------------------------------------------------------- */
 .entry {
   background: var(--surface);

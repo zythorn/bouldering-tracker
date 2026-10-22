@@ -3,6 +3,7 @@ import {
   AppData,
   BoulderLog,
   GradeCount,
+  PainScores,
   Session,
   SessionType,
   TrackedProject,
@@ -12,13 +13,18 @@ import {
 import { Actions, newId } from "../lib/storage";
 import {
   bodyweightOnOrBefore,
+  bodyweightShiftSinceLastHang,
+  deriveSessionType,
   loadPercentBW,
   progressionStatus,
 } from "../lib/calculations";
-import { RPE_LABELS } from "../lib/boulders";
-import { pct, signed, todayISO } from "../lib/format";
+import { RPE_LABELS, plural } from "../lib/boulders";
+import { cleanPain } from "../lib/pain";
+import { pct, shortDate, signed, todayISO } from "../lib/format";
 import { ChipToggle, Field, NumberInput, Segmented } from "./ui";
 import BoulderingBlock from "./BoulderingBlock";
+import PainField from "./PainField";
+import StrengthForm from "./StrengthForm";
 
 /** Gym picker: a select over the saved gyms with an inline "add new" option. */
 function GymField({
@@ -123,6 +129,7 @@ function RpeField({
           <ChipToggle
             key={label}
             active={value === i}
+            label={`Session RPE ${i}, ${label}`}
             onClick={() => onChange(value === i ? undefined : i)}
           >
             {i}
@@ -186,19 +193,16 @@ export default function LogSession({
   return (
     <div>
       {!editing && (
-        <div className="seg" style={{ marginBottom: 16 }}>
-          <button
-            className={kind === "workday" ? "active" : ""}
-            onClick={() => setKind("workday")}
-          >
-            Work-day session
-          </button>
-          <button
-            className={kind === "weekend" ? "active" : ""}
-            onClick={() => setKind("weekend")}
-          >
-            Weekend session
-          </button>
+        <div style={{ marginBottom: 16 }}>
+          <Segmented
+            value={kind}
+            onChange={setKind}
+            options={[
+              { value: "workday", label: "Work-day" },
+              { value: "weekend", label: "Weekend" },
+              { value: "strength", label: "Core/hip" },
+            ]}
+          />
         </div>
       )}
 
@@ -210,11 +214,19 @@ export default function LogSession({
           onDone={onDone}
           onCancel={onCancel}
         />
-      ) : (
+      ) : kind === "weekend" ? (
         <WeekendForm
           data={data}
           actions={actions}
           editing={editing?.kind === "weekend" ? editing : undefined}
+          onDone={onDone}
+          onCancel={onCancel}
+        />
+      ) : (
+        <StrengthForm
+          data={data}
+          actions={actions}
+          editing={editing?.kind === "strength" ? editing : undefined}
           onDone={onDone}
           onCancel={onCancel}
         />
@@ -239,9 +251,21 @@ function WorkdayForm({
   const unit = data.unit;
 
   const [date, setDate] = useState(editing?.date ?? todayISO());
-  const [sessionType, setSessionType] = useState<SessionType>(
-    editing?.sessionType ?? "normal",
+
+  // Normal vs compressed-rest is derived from the dates; an override is only
+  // stored when the user deliberately picks the other value.
+  const [override, setOverride] = useState<SessionType | undefined>(
+    editing?.sessionTypeOverride,
   );
+  const derived = useMemo(
+    () => deriveSessionType(date, data.sessions, editing?.id),
+    [date, data.sessions, editing?.id],
+  );
+  const sessionType = override ?? derived.type;
+
+  function pickSessionType(t: SessionType) {
+    setOverride(t === derived.type ? undefined : t);
+  }
 
   // Main hangs
   const [edgeMm, setEdgeMm] = useState<number | undefined>(
@@ -283,6 +307,7 @@ function WorkdayForm({
 
   const [notes, setNotes] = useState(editing?.notes ?? "");
   const [rpe, setRpe] = useState<number | undefined>(editing?.rpe);
+  const [pain, setPain] = useState<PainScores>(editing?.pain ?? {});
 
   const [gym, setGym] = useState(editing?.gym ?? "");
 
@@ -301,6 +326,19 @@ function WorkdayForm({
       ? loadPercentBW(bw.weight, addedWeight)
       : undefined;
 
+  // >2 kg bodyweight change since the last hang session: loads need a rethink.
+  const bwShift = useMemo(
+    () =>
+      bodyweightShiftSinceLastHang(
+        data.sessions,
+        data.bodyweights,
+        date,
+        unit,
+        editing?.id,
+      ),
+    [data.sessions, data.bodyweights, date, unit, editing?.id],
+  );
+
   const accLoadPct =
     bw && accType === "weighted" && accAdded != null
       ? loadPercentBW(bw.weight, accAdded)
@@ -311,11 +349,13 @@ function WorkdayForm({
       id: editing?.id ?? newId(),
       kind: "workday",
       date,
-      sessionType,
+      sessionType: editing?.sessionType, // legacy tag, carried over untouched
+      sessionTypeOverride: override,
       gym: gym || undefined,
       grades: grades.filter((g) => g.count > 0 || data.grades.includes(g.grade)),
       boulders: boulders.length > 0 ? boulders : undefined,
       rpe,
+      pain: cleanPain(pain),
       notes: notes.trim() || undefined,
     };
 
@@ -347,7 +387,7 @@ function WorkdayForm({
       id: editing?.id ?? "__draft__",
       kind: "workday",
       date,
-      sessionType,
+      sessionTypeOverride: sessionType, // the form's effective value
       grades: [],
       mainHang:
         !skipMainHang && edgeMm != null
@@ -385,13 +425,35 @@ function WorkdayForm({
       <Field label="Session type">
         <Segmented
           value={sessionType}
-          onChange={setSessionType}
+          onChange={pickSessionType}
           options={[
             { value: "normal", label: "Normal" },
             { value: "compressed-rest", label: "Compressed rest" },
           ]}
         />
       </Field>
+      <p className="hint" style={{ marginTop: -4 }}>
+        {override ? (
+          <>
+            Set manually; from the dates it would be{" "}
+            {derived.type === "normal" ? "normal" : "compressed rest"}.{" "}
+            <button
+              type="button"
+              className="link-btn"
+              onClick={() => setOverride(undefined)}
+            >
+              Use automatic
+            </button>
+          </>
+        ) : derived.prevDate ? (
+          <>
+            Automatic: {plural(derived.gapDays!, "day")} since the last work-day
+            session ({shortDate(derived.prevDate)}).
+          </>
+        ) : (
+          <>Automatic: no earlier work-day session.</>
+        )}
+      </p>
       {sessionType === "compressed-rest" && (
         <p className="hint" style={{ marginTop: -4 }}>
           Only 1 rest day — reduce to 3–4 sets and skip progression. This
@@ -469,6 +531,17 @@ function WorkdayForm({
               <>No bodyweight logged yet — add one to compute %BW load.</>
             )}
           </div>
+          {bwShift && (
+            <div className="flag warn" style={{ marginTop: 10 }}>
+              <span className="icon">⚖️</span>
+              <div className="body">
+                Bodyweight is <strong>{signed(bwShift.change, unit)}</strong>{" "}
+                since your last hang session ({shortDate(bwShift.lastHangDate)}),
+                so the same added weight is a different %BW load. Recalculate
+                before hanging.
+              </div>
+            </div>
+          )}
         </>
       )}
 
@@ -542,6 +615,8 @@ function WorkdayForm({
 
       <RpeField value={rpe} onChange={setRpe} />
 
+      <PainField value={pain} onChange={setPain} />
+
       <h3>Notes</h3>
       <textarea
         value={notes}
@@ -578,6 +653,7 @@ function WeekendForm({
   const [notes, setNotes] = useState(editing?.notes ?? "");
   const [gym, setGym] = useState(editing?.gym ?? "");
   const [rpe, setRpe] = useState<number | undefined>(editing?.rpe);
+  const [pain, setPain] = useState<PainScores>(editing?.pain ?? {});
   const [showGrades, setShowGrades] = useState(
     !!editing?.grades?.some((g) => g.count > 0) || !!editing?.boulders?.length,
   );
@@ -602,6 +678,7 @@ function WeekendForm({
       grades: showGrades && logged.length > 0 ? logged : undefined,
       boulders: keptBoulders.length > 0 ? keptBoulders : undefined,
       rpe,
+      pain: cleanPain(pain),
       notes: notes.trim() || undefined,
     };
     actions.saveSession(session, projectsToSave(newProjects, keptBoulders, gym));
@@ -653,6 +730,8 @@ function WeekendForm({
       )}
 
       <RpeField value={rpe} onChange={setRpe} />
+
+      <PainField value={pain} onChange={setPain} />
 
       <h3>Notes</h3>
       <textarea

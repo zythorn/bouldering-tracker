@@ -6,6 +6,8 @@ import {
   Session,
   TrackedProject,
 } from "../types";
+import { sessionBoulders } from "./calculations";
+import { daysBetween } from "./format";
 
 export const OUTCOMES: { value: BoulderOutcome; label: string }[] = [
   { value: "flash", label: "Flash" },
@@ -113,7 +115,7 @@ export function projectStats(
   const ordered = [...sessions].sort((a, b) => a.date.localeCompare(b.date));
   for (const s of ordered) {
     if (upTo && s.date > upTo) continue;
-    const logs = (s.boulders ?? []).filter((b) => b.projectId === projectId);
+    const logs = sessionBoulders(s).filter((b) => b.projectId === projectId);
     if (logs.length === 0) continue;
     stats.sessions += 1;
     stats.lastWorked = s.date;
@@ -137,13 +139,6 @@ export function attemptsText(stats: ProjectStats): string | undefined {
 }
 
 export type ProjectStatus = "open" | "idle" | "sent" | "retired";
-
-function daysBetween(fromISO: string, toISO: string): number {
-  const ms =
-    new Date(toISO + "T00:00:00").getTime() -
-    new Date(fromISO + "T00:00:00").getTime();
-  return Math.round(ms / 86_400_000);
-}
 
 export function projectStatus(
   project: TrackedProject,

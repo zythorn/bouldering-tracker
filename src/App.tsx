@@ -1,7 +1,17 @@
 import { useEffect, useState } from "react";
 import { useAppData } from "./lib/storage";
-import { progressionStatus } from "./lib/calculations";
-import { signed } from "./lib/format";
+import {
+  WEIGH_IN_EVERY_DAYS,
+  daysSinceWeighIn,
+  progressionStatus,
+} from "./lib/calculations";
+import { lastPainCheck, painAlerts } from "./lib/pain";
+import {
+  CORE_WEEKLY_MIN,
+  CORE_WEEKLY_TARGET,
+  coreSessionsThisWeek,
+} from "./lib/strength";
+import { formatDate, signed, todayISO } from "./lib/format";
 import { Session } from "./types";
 import LogSession from "./components/LogSession";
 import History from "./components/History";
@@ -28,6 +38,13 @@ export default function App() {
   const [toast, setToast] = useState<string | null>(null);
 
   const prog = progressionStatus(data.sessions);
+  const today = todayISO();
+  // Pain banner follows the last session that recorded a pain check, even if
+  // newer sessions were logged without one.
+  const painCheck = lastPainCheck(data.sessions);
+  const painHigh = painAlerts(painCheck?.pain);
+  const coreThisWeek = coreSessionsThisWeek(data.sessions, today);
+  const sinceWeighIn = daysSinceWeighIn(data.bodyweights, today);
 
   useEffect(() => {
     if (!toast) return;
@@ -62,6 +79,31 @@ export default function App() {
 
       {tab === "log" && (
         <>
+          {!editing && painCheck && painHigh.length > 0 && (
+            <div className="flag warn">
+              <span className="icon">⚠️</span>
+              <div className="body">
+                <strong>Last pain check</strong> ({formatDate(painCheck.date)}):{" "}
+                {painHigh
+                  .map((a) => `${a.label.toLowerCase()} ${a.score}/5`)
+                  .join(", ")}
+                . Review the stop rules in the plan.
+              </div>
+            </div>
+          )}
+          {!editing && (
+            <div className="status-line">
+              <span
+                className={coreThisWeek >= CORE_WEEKLY_MIN ? "ok" : undefined}
+              >
+                Core/hip this week: {coreThisWeek}/{CORE_WEEKLY_TARGET}
+              </span>{" "}
+              (min {CORE_WEEKLY_MIN})
+              {sinceWeighIn != null && sinceWeighIn >= WEIGH_IN_EVERY_DAYS && (
+                <> · ⚖️ no weigh-in for {sinceWeighIn} days</>
+              )}
+            </div>
+          )}
           {!editing && prog?.ready && (
             <div className="flag">
               <span className="icon">🎯</span>

@@ -1,6 +1,6 @@
 import { useRef, useState } from "react";
 import { AppData, Unit } from "../types";
-import { Actions, migrate } from "../lib/storage";
+import { Actions, listBackups, migrate } from "../lib/storage";
 import { GRADE_COLOR_NAMES, gradeFill } from "../lib/colors";
 import { Field, Segmented } from "./ui";
 
@@ -37,17 +37,24 @@ export default function Settings({
     actions.setGyms(data.gyms.filter((x) => x !== g));
   }
 
-  function exportData() {
-    const blob = new Blob([JSON.stringify(data, null, 2)], {
-      type: "application/json",
-    });
+  function download(filename: string, text: string) {
+    const blob = new Blob([text], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `training-log-${new Date().toISOString().slice(0, 10)}.json`;
+    a.download = filename;
     a.click();
     URL.revokeObjectURL(url);
   }
+
+  function exportData() {
+    download(
+      `training-log-${new Date().toISOString().slice(0, 10)}.json`,
+      JSON.stringify(data, null, 2),
+    );
+  }
+
+  const backups = listBackups();
 
   function importData(file: File) {
     const reader = new FileReader();
@@ -194,6 +201,28 @@ export default function Settings({
             }}
           />
         </div>
+        {backups.length > 0 && (
+          <>
+            <h3>Pre-upgrade backups</h3>
+            <p className="hint" style={{ marginTop: -4 }}>
+              Your data exactly as it was before an app update changed its
+              format. Download one and use Import JSON to go back.
+            </p>
+            <div className="inline-list">
+              {backups.map((b) => (
+                <button
+                  key={b.date}
+                  className="btn ghost"
+                  onClick={() =>
+                    download(`training-log-backup-${b.date}.json`, b.raw)
+                  }
+                >
+                  ⬇ {b.date}
+                </button>
+              ))}
+            </div>
+          </>
+        )}
       </div>
     </div>
   );

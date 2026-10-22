@@ -105,15 +105,20 @@ export function ChipToggle({
   active,
   onClick,
   children,
+  warn = false,
+  label,
 }: {
   active: boolean;
   onClick: () => void;
   children: React.ReactNode;
+  warn?: boolean; // tint the active state as a warning
+  label?: string; // accessible name when the visible text is ambiguous ("2")
 }) {
   return (
     <button
       type="button"
-      className={`chip-toggle ${active ? "active" : ""}`}
+      className={`chip-toggle ${active ? "active" : ""} ${warn ? "warn" : ""}`}
+      aria-label={label}
       aria-pressed={active}
       onClick={onClick}
     >

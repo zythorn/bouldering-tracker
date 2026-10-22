@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import {
   Bar,
   BarChart,
@@ -6,6 +6,7 @@ import {
   Legend,
   Line,
   LineChart,
+  ReferenceLine,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -14,10 +15,13 @@ import {
 import { AppData } from "../types";
 import {
   bodyweightOnOrBefore,
+  isClimbing,
   isWorkday,
   loadPercentBW,
+  sessionGrades,
 } from "../lib/calculations";
 import { gradeFill } from "../lib/colors";
+import { PAIN_AREAS, PAIN_STOP, hasPainCheck } from "../lib/pain";
 import { round, shortDate } from "../lib/format";
 
 const PALETTE = [
@@ -48,11 +52,12 @@ const tooltipStyle = {
 export default function Charts({ data }: { data: AppData }) {
   const hasHangs = data.sessions.some((s) => isWorkday(s) && s.mainHang);
   const hasGrades = data.sessions.some((s) =>
-    (s.grades ?? []).some((g) => g.count > 0),
+    sessionGrades(s).some((g) => g.count > 0),
   );
+  const hasPain = data.sessions.some((s) => hasPainCheck(s.pain));
   const hasTests = data.strengthTests.length > 0;
 
-  if (!hasHangs && !hasGrades && !hasTests) {
+  if (!hasHangs && !hasGrades && !hasPain && !hasTests) {
     return (
       <div>
         <div className="section-title">
@@ -72,6 +77,7 @@ export default function Charts({ data }: { data: AppData }) {
       </div>
       {hasHangs && <HangboardChart data={data} />}
       {hasGrades && <GradeVolumeChart data={data} />}
+      {hasPain && <PainChart data={data} />}
       {hasTests && <PullupChart data={data} />}
     </div>
   );
@@ -173,16 +179,33 @@ function HangboardChart({ data }: { data: AppData }) {
   );
 }
 
-/** Grade volume over time — a stacked bar per session. */
+/**
+ * Grade volume over time — a stacked bar per session. A gym filter lets
+ * progress be compared within one gym, without differences between gyms.
+ */
 function GradeVolumeChart({ data }: { data: AppData }) {
+  const [gym, setGym] = useState(""); // "" = all gyms
+
+  // Gyms that actually have graded sessions, so the filter never offers an
+  // empty view.
+  const gymOptions = useMemo(() => {
+    const set = new Set<string>();
+    for (const s of data.sessions) {
+      if (isClimbing(s) && s.gym && sessionGrades(s).some((g) => g.count > 0))
+        set.add(s.gym);
+    }
+    return [...set].sort();
+  }, [data.sessions]);
+
   const { rows, grades } = useMemo(() => {
     const gradeSet = new Set<string>();
     const rowList = data.sessions
-      .filter((s) => (s.grades ?? []).some((g) => g.count > 0))
+      .filter((s) => sessionGrades(s).some((g) => g.count > 0))
+      .filter((s) => !gym || (isClimbing(s) && s.gym === gym))
       .sort((a, b) => a.date.localeCompare(b.date))
       .map((s) => {
         const row: Record<string, number | string> = { date: shortDate(s.date) };
-        for (const g of s.grades ?? []) {
+        for (const g of sessionGrades(s)) {
           if (g.count > 0) {
             row[g.grade] = g.count;
             gradeSet.add(g.grade);
@@ -193,11 +216,33 @@ function GradeVolumeChart({ data }: { data: AppData }) {
     // Keep a stable, sorted grade order for the stack.
     const gradeList = [...gradeSet].sort();
     return { rows: rowList, grades: gradeList };
-  }, [data]);
+  }, [data, gym]);
 
   return (
     <div className="card">
-      <h2>Grade volume per session</h2>
+      <div className="card-head">
+        <h2>Grade volume per session</h2>
+        {gymOptions.length > 0 && (
+          <select
+            className="compact"
+            aria-label="Filter by gym"
+            value={gym}
+            onChange={(e) => setGym(e.target.value)}
+          >
+            <option value="">All gyms</option>
+            {gymOptions.map((g) => (
+              <option key={g} value={g}>
+                {g}
+              </option>
+            ))}
+          </select>
+        )}
+      </div>
+      {gym && (
+        <p className="hint" style={{ marginTop: -6 }}>
+          {rows.length} sessions at {gym}. Sessions without a gym are left out.
+        </p>
+      )}
       <div className="chart-wrap">
         <ResponsiveContainer width="100%" height="100%">
           <BarChart data={rows} margin={{ top: 8, right: 12, bottom: 4, left: -18 }}>
@@ -220,6 +265,77 @@ function GradeVolumeChart({ data }: { data: AppData }) {
           </BarChart>
         </ResponsiveContainer>
       </div>
+    </div>
+  );
+}
+
+const PAIN_COLORS: Record<string, string> = {
+  elbow: "#e5825b",
+  wrist: "#6ba7e5",
+  back: "#b77de5",
+};
+
+/**
+ * Pain check over time, one line per area, with the plan's stop threshold as
+ * a dashed line. Lines are straight (not smoothed) since exact scores matter.
+ */
+function PainChart({ data }: { data: AppData }) {
+  const rows = useMemo(
+    () =>
+      data.sessions
+        .filter((s) => hasPainCheck(s.pain))
+        .sort((a, b) => a.date.localeCompare(b.date))
+        .map((s) => ({
+          date: shortDate(s.date),
+          elbow: s.pain!.elbow ?? null,
+          wrist: s.pain!.wrist ?? null,
+          back: s.pain!.back ?? null,
+        })),
+    [data.sessions],
+  );
+
+  return (
+    <div className="card">
+      <h2>Pain check</h2>
+      <div className="chart-wrap">
+        <ResponsiveContainer width="100%" height="100%">
+          <LineChart data={rows} margin={{ top: 8, right: 12, bottom: 4, left: -24 }}>
+            <CartesianGrid stroke={grid} />
+            <XAxis dataKey="date" tick={axis} stroke={grid} />
+            <YAxis
+              tick={axis}
+              stroke={grid}
+              domain={[0, 5]}
+              ticks={[0, 1, 2, 3, 4, 5]}
+              allowDecimals={false}
+            />
+            <ReferenceLine
+              y={PAIN_STOP}
+              stroke="#e5534b"
+              strokeDasharray="5 4"
+            />
+            <Tooltip contentStyle={tooltipStyle} />
+            <Legend wrapperStyle={{ fontSize: 12 }} />
+            {PAIN_AREAS.map((a) => (
+              <Line
+                key={a.key}
+                type="linear"
+                dataKey={a.key}
+                name={a.label}
+                stroke={PAIN_COLORS[a.key]}
+                strokeWidth={2}
+                connectNulls
+                dot={{ r: 3, fill: PAIN_COLORS[a.key], strokeWidth: 0 }}
+                isAnimationActive={false}
+              />
+            ))}
+          </LineChart>
+        </ResponsiveContainer>
+      </div>
+      <p className="hint" style={{ marginTop: 6 }}>
+        Dashed line: the plan's stop threshold ({PAIN_STOP}). Only sessions with
+        a pain check are plotted.
+      </p>
     </div>
   );
 }
