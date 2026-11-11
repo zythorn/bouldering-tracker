@@ -127,7 +127,7 @@ export default function App() {
       {tab === "history" && (
         <History data={data} actions={actions} onEdit={goLog} />
       )}
-      {tab === "charts" && <Charts data={data} />}
+      {tab === "charts" && <Charts data={data} actions={actions} />}
       {tab === "weight" && <Bodyweight data={data} actions={actions} />}
       {tab === "strength" && <StrengthTests data={data} actions={actions} />}
       {tab === "settings" && <Settings data={data} actions={actions} />}

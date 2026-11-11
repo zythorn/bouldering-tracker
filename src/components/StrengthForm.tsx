@@ -8,7 +8,7 @@ import {
 } from "../lib/strength";
 import { cleanPain } from "../lib/pain";
 import { todayISO } from "../lib/format";
-import { Field, NumberInput } from "./ui";
+import { DurationField, Field, NumberInput } from "./ui";
 import PainField from "./PainField";
 
 /** One checklist item: a "done" checkbox, revealing its inputs when ticked. */
@@ -88,6 +88,7 @@ export default function StrengthForm({
     seconds: editing ? editing.sidePlank?.seconds : p.sidePlank.seconds,
   });
   const [pain, setPain] = useState<PainScores>(editing?.pain ?? {});
+  const [durationMin, setDurationMin] = useState(editing?.durationMin);
   const [notes, setNotes] = useState(editing?.notes ?? "");
 
   const session: StrengthSession = {
@@ -103,6 +104,7 @@ export default function StrengthForm({
       ? { sets: plank.sets, seconds: plank.seconds }
       : undefined,
     pain: cleanPain(pain),
+    durationMin,
     notes: notes.trim() || undefined,
   };
   const gaps = prescriptionGaps(session, unit);
@@ -207,6 +209,8 @@ export default function StrengthForm({
           <>Short of the prescription: {gaps.join(", ")}</>
         )}
       </div>
+
+      <DurationField value={durationMin} onChange={setDurationMin} />
 
       <PainField value={pain} onChange={setPain} />
 

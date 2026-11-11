@@ -171,6 +171,9 @@ function SessionCard({
               RPE {session.rpe} · {RPE_LABELS[session.rpe]}
             </span>
           )}
+          {session.durationMin != null && (
+            <span className="badge">⏱ {session.durationMin} min</span>
+          )}
           {session.kind === "strength" ? (
             <span className="badge core">Core/hip</span>
           ) : session.kind === "weekend" ? (

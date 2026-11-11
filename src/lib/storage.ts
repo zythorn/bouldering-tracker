@@ -154,6 +154,11 @@ export function useAppData() {
           d.gyms = gyms;
           return d;
         }),
+      setTableHiddenGrades: (grades: string[]) =>
+        update((d) => {
+          d.tableHiddenGrades = grades.length ? grades : undefined;
+          return d;
+        }),
 
       upsertBodyweight: (entry: AppData["bodyweights"][number]) =>
         update((d) => {

@@ -49,6 +49,12 @@ export function addDays(iso: string, n: number): string {
   return d.toISOString().slice(0, 10);
 }
 
+export function addMonths(iso: string, n: number): string {
+  const d = utc(iso);
+  d.setUTCMonth(d.getUTCMonth() + n);
+  return d.toISOString().slice(0, 10);
+}
+
 /** The Monday of the (Mon–Sun) week containing `iso`. */
 export function weekStart(iso: string): string {
   const weekday = (utc(iso).getUTCDay() + 6) % 7; // Mon = 0 … Sun = 6

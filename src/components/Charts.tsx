@@ -13,6 +13,7 @@ import {
   YAxis,
 } from "recharts";
 import { AppData } from "../types";
+import { Actions } from "../lib/storage";
 import {
   bodyweightOnOrBefore,
   isClimbing,
@@ -22,7 +23,19 @@ import {
 } from "../lib/calculations";
 import { gradeFill } from "../lib/colors";
 import { PAIN_AREAS, PAIN_STOP, hasPainCheck } from "../lib/pain";
-import { round, shortDate } from "../lib/format";
+import {
+  CHART_RANGES,
+  ChartRange,
+  GymRow,
+  TABLE_PERIODS,
+  TablePeriod,
+  gradeFilterIncludes,
+  gradeFilterOptions,
+  gymGradeTable,
+  rangeStart,
+} from "../lib/trends";
+import { round, shortDate, todayISO } from "../lib/format";
+import { ChipToggle, Segmented } from "./ui";
 
 const PALETTE = [
   "#4cc38a",
@@ -49,7 +62,13 @@ const tooltipStyle = {
   color: "#e6edf3",
 };
 
-export default function Charts({ data }: { data: AppData }) {
+export default function Charts({
+  data,
+  actions,
+}: {
+  data: AppData;
+  actions: Actions;
+}) {
   const hasHangs = data.sessions.some((s) => isWorkday(s) && s.mainHang);
   const hasGrades = data.sessions.some((s) =>
     sessionGrades(s).some((g) => g.count > 0),
@@ -75,9 +94,11 @@ export default function Charts({ data }: { data: AppData }) {
       <div className="section-title">
         <h2>Trends</h2>
       </div>
-      {hasHangs && <HangboardChart data={data} />}
       {hasGrades && <GradeVolumeChart data={data} />}
+      {hasGrades && <GymGradeTable data={data} actions={actions} />}
       {hasPain && <PainChart data={data} />}
+      {/* Hangs are paused, so this sits below the bouldering charts. */}
+      {hasHangs && <HangboardChart data={data} />}
       {hasTests && <PullupChart data={data} />}
     </div>
   );
@@ -184,6 +205,8 @@ function HangboardChart({ data }: { data: AppData }) {
  * progress be compared within one gym, without differences between gyms.
  */
 function GradeVolumeChart({ data }: { data: AppData }) {
+  const [range, setRange] = useState<ChartRange>("3m");
+  const [gradeFilter, setGradeFilter] = useState("all");
   const [gym, setGym] = useState(""); // "" = all gyms
 
   // Gyms that actually have graded sessions, so the filter never offers an
@@ -197,31 +220,76 @@ function GradeVolumeChart({ data }: { data: AppData }) {
     return [...set].sort();
   }, [data.sessions]);
 
-  const { rows, grades } = useMemo(() => {
+  const gradeOptions = useMemo(
+    () => gradeFilterOptions(data.grades),
+    [data.grades],
+  );
+
+  const { rows, grades, sends } = useMemo(() => {
+    const from = rangeStart(range, todayISO());
+    const includes = gradeFilterIncludes(gradeFilter, data.grades);
     const gradeSet = new Set<string>();
+    let total = 0;
+    // Every session with sends stays on the axis, even with none in the
+    // chosen grades, so "V5 and up" also shows how often they happen.
     const rowList = data.sessions
       .filter((s) => sessionGrades(s).some((g) => g.count > 0))
+      .filter((s) => !from || s.date >= from)
       .filter((s) => !gym || (isClimbing(s) && s.gym === gym))
       .sort((a, b) => a.date.localeCompare(b.date))
       .map((s) => {
         const row: Record<string, number | string> = { date: shortDate(s.date) };
         for (const g of sessionGrades(s)) {
-          if (g.count > 0) {
+          if (g.count > 0 && includes(g.grade)) {
             row[g.grade] = g.count;
             gradeSet.add(g.grade);
+            total += g.count;
           }
         }
         return row;
       });
-    // Keep a stable, sorted grade order for the stack.
-    const gradeList = [...gradeSet].sort();
-    return { rows: rowList, grades: gradeList };
-  }, [data, gym]);
+    // Stack in the user's grade order (easiest at the bottom).
+    const rank = (g: string) => {
+      const i = data.grades.indexOf(g);
+      return i < 0 ? data.grades.length : i;
+    };
+    const gradeList = [...gradeSet].sort((a, b) => rank(a) - rank(b));
+    return { rows: rowList, grades: gradeList, sends: total };
+  }, [data, range, gradeFilter, gym]);
+
+  const gradeLabel =
+    gradeFilter === "all"
+      ? ""
+      : ` ${gradeOptions.find((o) => o.value === gradeFilter)?.label ?? ""}`;
 
   return (
     <div className="card">
-      <div className="card-head">
-        <h2>Grade volume per session</h2>
+      <h2>Grade volume per session</h2>
+      <div className="chart-controls">
+        <select
+          className="compact"
+          aria-label="Time range"
+          value={range}
+          onChange={(e) => setRange(e.target.value as ChartRange)}
+        >
+          {CHART_RANGES.map((r) => (
+            <option key={r.value} value={r.value}>
+              {r.label}
+            </option>
+          ))}
+        </select>
+        <select
+          className="compact"
+          aria-label="Grades shown"
+          value={gradeFilter}
+          onChange={(e) => setGradeFilter(e.target.value)}
+        >
+          {gradeOptions.map((o) => (
+            <option key={o.value} value={o.value}>
+              {o.label}
+            </option>
+          ))}
+        </select>
         {gymOptions.length > 0 && (
           <select
             className="compact"
@@ -238,11 +306,11 @@ function GradeVolumeChart({ data }: { data: AppData }) {
           </select>
         )}
       </div>
-      {gym && (
-        <p className="hint" style={{ marginTop: -6 }}>
-          {rows.length} sessions at {gym}. Sessions without a gym are left out.
-        </p>
-      )}
+      <p className="hint" style={{ margin: "0 0 8px" }}>
+        {rows.length} sessions · {sends}
+        {gradeLabel} sends
+        {gym && <> at {gym} (sessions without a gym are left out)</>}
+      </p>
       <div className="chart-wrap">
         <ResponsiveContainer width="100%" height="100%">
           <BarChart data={rows} margin={{ top: 8, right: 12, bottom: 4, left: -18 }}>
@@ -265,6 +333,107 @@ function GradeVolumeChart({ data }: { data: AppData }) {
           </BarChart>
         </ResponsiveContainer>
       </div>
+    </div>
+  );
+}
+
+/**
+ * Sends per grade at each gym for a calendar period, with each gym's session
+ * count for context. Grade columns can be hidden (e.g. warm-up grades); the
+ * choice is saved with the data and Total only counts the visible grades.
+ */
+function GymGradeTable({ data, actions }: { data: AppData; actions: Actions }) {
+  const [period, setPeriod] = useState<TablePeriod>("month");
+  const table = useMemo(
+    () => gymGradeTable(data.sessions, data.grades, period, todayISO()),
+    [data.sessions, data.grades, period],
+  );
+
+  const hidden = new Set(data.tableHiddenGrades ?? []);
+  // Offer every configured grade as a toggle, plus any others in this period.
+  const toggleable = [
+    ...data.grades,
+    ...table.grades.filter((g) => !data.grades.includes(g)),
+  ];
+  const shown = table.grades.filter((g) => !hidden.has(g));
+
+  function toggleGrade(g: string) {
+    const next = new Set(hidden);
+    if (next.has(g)) next.delete(g);
+    else next.add(g);
+    actions.setTableHiddenGrades([...next]);
+  }
+
+  const rowTotal = (r: GymRow) => shown.reduce((n, g) => n + (r.counts[g] ?? 0), 0);
+  const cell = (n?: number) =>
+    n ? n : <span className="muted">–</span>;
+  const rows = table.noGym ? [...table.rows, table.noGym] : table.rows;
+  const periodLabel = TABLE_PERIODS.find((p) => p.value === period)!.label;
+
+  return (
+    <div className="card">
+      <h2>Sends by gym</h2>
+      <Segmented value={period} onChange={setPeriod} options={TABLE_PERIODS} />
+      <div className="chip-row" style={{ margin: "10px 0" }}>
+        <span className="muted" style={{ fontSize: 12, alignSelf: "center" }}>
+          Show:
+        </span>
+        {toggleable.map((g) => (
+          <ChipToggle
+            key={g}
+            active={!hidden.has(g)}
+            label={`Show ${g} column`}
+            onClick={() => toggleGrade(g)}
+          >
+            {g}
+          </ChipToggle>
+        ))}
+      </div>
+
+      {table.total.sessions === 0 ? (
+        <div className="empty" style={{ padding: "20px 0" }}>
+          No climbing sessions {periodLabel.toLowerCase()} yet.
+        </div>
+      ) : (
+        <div className="table-scroll">
+          <table className="stats-table">
+            <thead>
+              <tr>
+                <th>Gym</th>
+                <th title="Climbing sessions">Sess.</th>
+                {shown.map((g) => (
+                  <th key={g}>{g}</th>
+                ))}
+                <th>Total</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((r) => (
+                <tr key={r.gym} className={r === table.noGym ? "muted-row" : ""}>
+                  <td>{r.gym}</td>
+                  <td className="muted">{r.sessions}</td>
+                  {shown.map((g) => (
+                    <td key={g}>{cell(r.counts[g])}</td>
+                  ))}
+                  <td>
+                    <b>{cell(rowTotal(r))}</b>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+            <tfoot>
+              <tr>
+                <td>Total</td>
+                <td>{table.total.sessions}</td>
+                {shown.map((g) => (
+                  <td key={g}>{cell(table.total.counts[g])}</td>
+                ))}
+                <td>{cell(rowTotal(table.total))}</td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      )}
     </div>
   );
 }

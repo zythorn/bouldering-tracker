@@ -97,6 +97,7 @@ export interface WorkdaySession {
   accessory?: Accessory;
   rpe?: number; // session effort, 0 (light) to 5 (limit)
   pain?: PainScores;
+  durationMin?: number;
   notes?: string;
 }
 
@@ -109,6 +110,7 @@ export interface WeekendSession {
   boulders?: BoulderLog[];
   rpe?: number;
   pain?: PainScores;
+  durationMin?: number;
   notes?: string;
 }
 
@@ -126,6 +128,7 @@ export interface StrengthSession {
   glutBridge?: { sets?: number; reps?: number }; // single-leg, reps per side
   sidePlank?: { sets?: number; seconds?: number }; // seconds per side
   pain?: PainScores;
+  durationMin?: number;
   notes?: string;
 }
 
@@ -156,6 +159,7 @@ export interface AppData {
   sessions: Session[];
   projects: TrackedProject[];
   strengthTests: StrengthTest[];
+  tableHiddenGrades?: string[]; // grade columns hidden in the Trends gym table
 }
 
 export const DEFAULT_DATA: AppData = {

@@ -714,6 +714,63 @@ select.compact {
   font-size: 13px;
 }
 
+/* Row of filters under a chart title; wraps on phones */
+.chart-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.chart-controls select.compact {
+  max-width: none;
+  flex: 1 1 auto;
+}
+
+/* Gym × grade table ---------------------------------------------------- */
+.table-scroll {
+  overflow-x: auto; /* many gyms/grades scroll sideways instead of squashing */
+}
+
+.stats-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+
+.stats-table th,
+.stats-table td {
+  padding: 7px 6px;
+  text-align: center;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+
+.stats-table th {
+  color: var(--muted);
+  font-weight: 600;
+  font-size: 12px;
+}
+
+.stats-table th:first-child,
+.stats-table td:first-child {
+  text-align: left;
+  white-space: normal; /* long gym names wrap rather than widen the table */
+  min-width: 70px;
+}
+
+.stats-table tfoot td {
+  font-weight: 700;
+  border-bottom: none;
+  border-top: 2px solid var(--border);
+}
+
+.stats-table .muted-row td:first-child {
+  color: var(--muted);
+  font-style: italic;
+}
+
 /* List items --------------------------------------------------------- */
 .entry {
   background: var(--surface);

@@ -21,7 +21,13 @@ import {
 import { RPE_LABELS, plural } from "../lib/boulders";
 import { cleanPain } from "../lib/pain";
 import { pct, shortDate, signed, todayISO } from "../lib/format";
-import { ChipToggle, Field, NumberInput, Segmented } from "./ui";
+import {
+  ChipToggle,
+  DurationField,
+  Field,
+  NumberInput,
+  Segmented,
+} from "./ui";
 import BoulderingBlock from "./BoulderingBlock";
 import PainField from "./PainField";
 import StrengthForm from "./StrengthForm";
@@ -308,6 +314,7 @@ function WorkdayForm({
   const [notes, setNotes] = useState(editing?.notes ?? "");
   const [rpe, setRpe] = useState<number | undefined>(editing?.rpe);
   const [pain, setPain] = useState<PainScores>(editing?.pain ?? {});
+  const [durationMin, setDurationMin] = useState(editing?.durationMin);
 
   const [gym, setGym] = useState(editing?.gym ?? "");
 
@@ -356,6 +363,7 @@ function WorkdayForm({
       boulders: boulders.length > 0 ? boulders : undefined,
       rpe,
       pain: cleanPain(pain),
+      durationMin,
       notes: notes.trim() || undefined,
     };
 
@@ -613,6 +621,8 @@ function WorkdayForm({
         </>
       )}
 
+      <DurationField value={durationMin} onChange={setDurationMin} />
+
       <RpeField value={rpe} onChange={setRpe} />
 
       <PainField value={pain} onChange={setPain} />
@@ -654,6 +664,7 @@ function WeekendForm({
   const [gym, setGym] = useState(editing?.gym ?? "");
   const [rpe, setRpe] = useState<number | undefined>(editing?.rpe);
   const [pain, setPain] = useState<PainScores>(editing?.pain ?? {});
+  const [durationMin, setDurationMin] = useState(editing?.durationMin);
   const [showGrades, setShowGrades] = useState(
     !!editing?.grades?.some((g) => g.count > 0) || !!editing?.boulders?.length,
   );
@@ -679,6 +690,7 @@ function WeekendForm({
       boulders: keptBoulders.length > 0 ? keptBoulders : undefined,
       rpe,
       pain: cleanPain(pain),
+      durationMin,
       notes: notes.trim() || undefined,
     };
     actions.saveSession(session, projectsToSave(newProjects, keptBoulders, gym));
@@ -728,6 +740,8 @@ function WeekendForm({
           date={date}
         />
       )}
+
+      <DurationField value={durationMin} onChange={setDurationMin} />
 
       <RpeField value={rpe} onChange={setRpe} />
 

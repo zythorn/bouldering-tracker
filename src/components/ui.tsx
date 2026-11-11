@@ -100,6 +100,23 @@ export function Stepper({
   );
 }
 
+/** Optional session length in minutes (half-width, used by every session form). */
+export function DurationField({
+  value,
+  onChange,
+}: {
+  value: number | undefined;
+  onChange: (v: number | undefined) => void;
+}) {
+  return (
+    <div className="grid-2" style={{ marginTop: 14 }}>
+      <Field label="Duration (min)">
+        <NumberInput value={value} onChange={onChange} min={0} placeholder="e.g. 90" />
+      </Field>
+    </div>
+  );
+}
+
 /** A pill that toggles on/off (used for tags, feel and RPE). */
 export function ChipToggle({
   active,

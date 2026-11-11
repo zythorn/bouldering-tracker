@@ -34,6 +34,7 @@ src/
                          project stats/status
     pain.ts              Pain-check areas, scale, "last pain check" lookup
     strength.ts          Core/hip prescription + weekly (Mon–Sun) count
+    trends.ts            Trends ranges/periods, grade filters, gym × grade table
     format.ts            Date / number formatting + calendar arithmetic
   components/
     LogSession.tsx       Work-day + weekend logging form (the quick-log flow)
@@ -115,7 +116,15 @@ src/
 - **Bodyweight trend & reminders** — a chart on the Weight tab, a
   "no weigh-in for 7+ days" reminder, and a warning on the hang section when
   bodyweight moved more than 2 kg (4.4 lb) since the last hang session.
-- **Gym filter** on the grade-volume chart, to compare progress within one gym.
+- **Grade-volume chart filters** — rolling range (last 4 weeks / last 3
+  months / all time), grade ("V5 only", "V5 and up", …; sessions without
+  matching sends stay on the axis so frequency is visible) and gym.
+- **Sends by gym** — a gym × grade table of sends for this week (Mon–Sun),
+  this month or all time, with each gym's session count for context, a
+  "No gym" row and totals. Grade columns can be hidden (e.g. warm-up grades);
+  the choice is saved with the data and Total counts only visible grades.
+- **Session duration** — optional minutes on every session type, shown as a
+  badge in history.
 - **JSON export / import** in Settings for backups / moving devices.
 
 ## Data migrations
@@ -134,16 +143,16 @@ Settings → Data → Pre-upgrade backups.
 
 ## Roadmap / future ideas
 
-- **v2 brief, phase 2** — optional endurance block on work-day sessions
-  (rounds, minutes per round, rest, target effort, completed as planned, with
-  total continuous-climbing minutes over time), session duration, and a
-  "V5+ sends per session" chart with an adjustable threshold and gym filter.
+- **Boulder analytics (next)** — stats from detailed boulders: e.g.
+  attempts-to-send by grade, flash rate, grade feel, or which tags cost the
+  most attempts.
+- **"Feature 2" (to be discussed)** — a major change motivated by reworking
+  Accessory / pull-ups. The endurance block from the v2 brief (rounds, minutes
+  per round, rest, target effort, completed as planned; continuous-climbing
+  minutes over time) waits for the next training stage and may fold into it.
 - **v2 brief, later** — hang additions once hangs resume: seconds held per
   set, and a second edge for occasional tests (fold into "multiple hang groups"
   below).
-- **Accessory / pull-ups rework** — the section is unchanged for now.
-- **Boulder analytics** — e.g. attempts-to-send by grade, or which tags cost
-  the most attempts.
 - **Multiple hang groups per session** — log mixed edges/loads in one session
   (e.g. 2 sets on 20mm + 4 sets on 33mm). Requires turning the single
   `mainHang` into a list, and teaching the progression streak and hangboard
