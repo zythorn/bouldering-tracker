@@ -1,5 +1,5 @@
 // Core/hip routine prescribed by the physio.
-import { Session, StrengthSession, Unit } from "../types";
+import { CoreHipBlock, Session, Unit } from "../types";
 import { addDays, weekStart } from "./format";
 
 export const CORE_PRESCRIPTION = {
@@ -19,7 +19,7 @@ export const CORE_WEEKLY_MIN = 2;
 /**
  * What fell short of the prescription; empty means "completed as prescribed".
  */
-export function prescriptionGaps(s: StrengthSession, unit: Unit): string[] {
+export function prescriptionGaps(s: CoreHipBlock, unit: Unit): string[] {
   const gaps: string[] = [];
   const p = CORE_PRESCRIPTION;
   if (!s.breathing) gaps.push("breathing / core control");
@@ -49,11 +49,14 @@ export function prescriptionGaps(s: StrengthSession, unit: Unit): string[] {
   return gaps;
 }
 
-/** Core/hip sessions in the Monday–Sunday week containing `today`. */
+/** Sessions with a core/hip block in the Monday–Sunday week containing `today`. */
 export function coreSessionsThisWeek(sessions: Session[], today: string): number {
   const from = weekStart(today);
   const to = addDays(from, 6);
   return sessions.filter(
-    (s) => s.kind === "strength" && s.date >= from && s.date <= to,
+    (s) =>
+      s.blocks.some((b) => b.kind === "corehip") &&
+      s.date >= from &&
+      s.date <= to,
   ).length;
 }

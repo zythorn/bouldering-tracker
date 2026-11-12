@@ -1,16 +1,107 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { AppData, ClimbingSession, DEFAULT_DATA, TrackedProject } from "../types";
-import { isClimbing, sessionBoulders } from "./calculations";
+import {
+  AppData,
+  Block,
+  BlockKind,
+  BoulderLog,
+  CoreHipBlock,
+  DEFAULT_DATA,
+  GradeCount,
+  MainHang,
+  PainScores,
+  Session,
+  SessionType,
+  TrackedProject,
+} from "../types";
+import { sessionBoulders } from "./calculations";
 import { todayISO } from "./format";
 
 const STORAGE_KEY = "bouldering-training-log:v1";
 const BACKUP_PREFIX = "bouldering-training-log:backup:";
 
-// Fields older versions stored on sessions that the current model replaced.
-type LegacySession = ClimbingSession & {
+/**
+ * A session as older versions stored it: one of three fixed kinds instead of
+ * a list of blocks. Only read by migrate().
+ */
+interface LegacySession extends Omit<CoreHipBlock, "kind"> {
+  id: string;
+  kind?: "workday" | "weekend" | "strength";
+  date: string;
+  gym?: string;
+  rpe?: number;
+  pain?: PainScores;
+  durationMin?: number;
+  notes?: string;
+  blocks?: Block[];
+  // work-day / weekend
+  grades?: GradeCount[];
+  boulders?: BoulderLog[];
+  mainHang?: MainHang;
+  sessionTypeOverride?: SessionType;
+  sessionType?: SessionType; // manual tag, unused since dates decide
+  accessory?: {
+    type: "bodyweight" | "weighted";
+    sets?: number;
+    reps: number;
+    addedWeight?: number;
+  };
+  // removed features
   project?: { name?: string; sent?: boolean };
   activation?: unknown;
-};
+}
+
+/** Convert an old fixed-kind session into a session made of blocks. */
+function toBlocks(s: LegacySession): Session {
+  const blocks: Block[] = [];
+  if (s.kind === "strength") {
+    blocks.push({
+      kind: "corehip",
+      breathing: s.breathing,
+      deadlift: s.deadlift,
+      glutBridge: s.glutBridge,
+      sidePlank: s.sidePlank,
+    });
+  } else {
+    const grades = (s.grades ?? []).filter((g) => g.count > 0);
+    if (grades.length > 0 || s.boulders?.length) {
+      blocks.push({
+        kind: "bouldering",
+        grades,
+        boulders: s.boulders?.length ? s.boulders : undefined,
+      });
+    }
+    if (s.mainHang) {
+      blocks.push({
+        kind: "hangs",
+        ...s.mainHang,
+        typeOverride: s.sessionTypeOverride,
+      });
+    }
+    const acc = s.accessory;
+    if (acc && acc.reps != null) {
+      // "3 sets × 8 reps" becomes three logged sets of 8.
+      const addedWeight =
+        acc.type === "weighted" && acc.addedWeight ? acc.addedWeight : undefined;
+      blocks.push({
+        kind: "pullups",
+        sets: Array.from({ length: Math.max(1, acc.sets ?? 1) }, () => ({
+          reps: acc.reps,
+          addedWeight,
+        })),
+      });
+    }
+  }
+  return {
+    id: s.id,
+    date: s.date,
+    gym: s.gym,
+    blocks,
+    rpe: s.rpe,
+    pain: s.pain,
+    durationMin: s.durationMin,
+    notes: s.notes,
+  };
+}
 
 /**
  * Bring stored or imported data up to the current model. Safe to run on
@@ -20,6 +111,10 @@ type LegacySession = ClimbingSession & {
  *   (grouped by name), with a linked BoulderLog on each session. The old field
  *   never recorded a grade or attempts, so those stay empty.
  * - Activation-hang data is dropped (the feature was removed).
+ * - Fixed session kinds (work-day / weekend / core/hip) become blocks: a
+ *   bouldering block when anything was climbed, a hangs block when hangs were
+ *   logged, a core/hip block, and a pull-ups block from accessory (one logged
+ *   set per set). The work-day / weekend distinction is dropped.
  */
 export function migrate(raw: Partial<AppData>): AppData {
   const data: AppData = {
@@ -29,16 +124,17 @@ export function migrate(raw: Partial<AppData>): AppData {
     sessions: raw.sessions ?? [],
     projects: raw.projects ?? [],
   };
+  const legacy = data.sessions as unknown as LegacySession[];
 
   const byName = new Map<string, TrackedProject>(
     data.projects.map((p) => [p.name.trim().toLowerCase(), p]),
   );
 
   // Oldest first, so each project gets the gym and date it was first worked.
-  const ordered = [...data.sessions].sort((a, b) =>
-    a.date.localeCompare(b.date),
-  );
-  for (const s of ordered.filter(isClimbing) as LegacySession[]) {
+  const ordered = [...legacy]
+    .filter((s) => !s.blocks && s.kind !== "strength")
+    .sort((a, b) => a.date.localeCompare(b.date));
+  for (const s of ordered) {
     delete s.activation;
     const old = s.project;
     delete s.project;
@@ -67,6 +163,8 @@ export function migrate(raw: Partial<AppData>): AppData {
       },
     ];
   }
+
+  data.sessions = legacy.map((s) => (s.blocks ? (s as Session) : toBlocks(s)));
   return data;
 }
 
@@ -159,6 +257,11 @@ export function useAppData() {
       setTableHiddenGrades: (grades: string[]) =>
         update((d) => {
           d.tableHiddenGrades = grades.length ? grades : undefined;
+          return d;
+        }),
+      setHiddenBlocks: (kinds: BlockKind[]) =>
+        update((d) => {
+          d.hiddenBlocks = kinds.length ? kinds : undefined;
           return d;
         }),
 

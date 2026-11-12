@@ -16,8 +16,7 @@ import { AppData } from "../types";
 import { Actions } from "../lib/storage";
 import {
   bodyweightOnOrBefore,
-  isClimbing,
-  isWorkday,
+  hangSessions,
   loadPercentBW,
   sessionGrades,
 } from "../lib/calculations";
@@ -80,14 +79,14 @@ export default function Charts({
   data: AppData;
   actions: Actions;
 }) {
-  const hasHangs = data.sessions.some((s) => isWorkday(s) && s.mainHang);
+  const hasHangs = hangSessions(data.sessions).length > 0;
   const hasGrades = data.sessions.some((s) =>
     sessionGrades(s).some((g) => g.count > 0),
   );
   const hasPain = data.sessions.some((s) => hasPainCheck(s.pain));
   const hasTests = data.strengthTests.length > 0;
   const hasBoulders = collectBoulders(data.sessions, data.projects).length > 0;
-  const hasRpe = data.sessions.some((s) => isClimbing(s) && s.rpe != null);
+  const hasRpe = data.sessions.some((s) => s.rpe != null);
 
   if (!hasHangs && !hasGrades && !hasPain && !hasTests && !hasRpe) {
     return (
@@ -127,15 +126,14 @@ function HangboardChart({ data }: { data: AppData }) {
     // so each line bridges its own gaps via connectNulls.
     const rowMap = new Map<number, Record<string, number>>();
     const edgeSet = new Set<number>();
-    for (const s of data.sessions) {
-      if (!isWorkday(s) || !s.mainHang) continue;
+    for (const { session: s, hang } of hangSessions(data.sessions)) {
       const bw = bodyweightOnOrBefore(data.bodyweights, s.date);
       if (!bw) continue;
-      const load = round(loadPercentBW(bw.weight, s.mainHang.addedWeight));
+      const load = round(loadPercentBW(bw.weight, hang.addedWeight));
       const ts = new Date(s.date).getTime();
-      edgeSet.add(s.mainHang.edgeMm);
+      edgeSet.add(hang.edgeMm);
       const row = rowMap.get(ts) ?? { ts };
-      row[String(s.mainHang.edgeMm)] = load;
+      row[String(hang.edgeMm)] = load;
       rowMap.set(ts, row);
     }
     const rowList = [...rowMap.values()].sort((a, b) => a.ts - b.ts);
@@ -229,7 +227,7 @@ function GradeVolumeChart({ data }: { data: AppData }) {
   const gymOptions = useMemo(() => {
     const set = new Set<string>();
     for (const s of data.sessions) {
-      if (isClimbing(s) && s.gym && sessionGrades(s).some((g) => g.count > 0))
+      if (s.gym && sessionGrades(s).some((g) => g.count > 0))
         set.add(s.gym);
     }
     return [...set].sort();
@@ -250,7 +248,7 @@ function GradeVolumeChart({ data }: { data: AppData }) {
     const rowList = data.sessions
       .filter((s) => sessionGrades(s).some((g) => g.count > 0))
       .filter((s) => !from || s.date >= from)
-      .filter((s) => !gym || (isClimbing(s) && s.gym === gym))
+      .filter((s) => !gym || s.gym === gym)
       .sort((a, b) => a.date.localeCompare(b.date))
       .map((s) => {
         const row: Record<string, number | string> = { date: shortDate(s.date) };

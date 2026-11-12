@@ -499,11 +499,6 @@ textarea {
   border-color: var(--warn);
 }
 
-.badge.weekend {
-  color: #6ba7e5;
-  border-color: #3a5a7e;
-}
-
 .badge.gym {
   color: var(--text);
 }
@@ -657,12 +652,68 @@ textarea {
   color: var(--danger);
 }
 
-/* Core/hip ------------------------------------------------------------ */
-.badge.core {
-  color: #b77de5;
-  border-color: #5e4a78;
+/* Training blocks in the session form --------------------------------- */
+.train-block {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 4px 12px 12px;
+  margin: 14px 0;
 }
 
+.block-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.card .block-head h3 {
+  margin: 10px 0 0;
+  color: var(--text);
+}
+
+.block-remove {
+  padding: 6px 4px;
+  font-size: 12px;
+}
+
+.add-block {
+  margin-top: 14px;
+  border-style: dashed;
+}
+
+.block-picker {
+  margin-top: 14px;
+}
+
+/* Pull-up sets: one row per set */
+.set-grid {
+  display: grid;
+  grid-template-columns: 52px 1fr 1fr 32px;
+  gap: 8px;
+  align-items: center;
+}
+
+.set-head {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.set-n {
+  font-size: 14px;
+  text-align: center;
+}
+
+.set-remove {
+  padding: 6px 0;
+}
+
+.add-set {
+  margin-top: 10px;
+}
+
+/* Core/hip ------------------------------------------------------------ */
 .prescribed {
   margin-top: 6px;
   font-size: 13px;

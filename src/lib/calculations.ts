@@ -1,13 +1,13 @@
 import {
   BodyweightEntry,
   BoulderLog,
-  ClimbingSession,
   GradeCount,
+  HangBlock,
   Session,
   SessionType,
   Unit,
-  WorkdaySession,
 } from "../types";
+import { getBlock } from "./blocks";
 import { daysBetween } from "./format";
 
 /** The most recent bodyweight entry dated on or before `date`. */
@@ -26,46 +26,54 @@ export function loadPercentBW(bodyweight: number, addedWeight: number): number {
   return ((bodyweight + addedWeight) / bodyweight) * 100;
 }
 
-export function isWorkday(s: Session): s is WorkdaySession {
-  return s.kind === "workday";
-}
-
-export function isClimbing(s: Session): s is ClimbingSession {
-  return s.kind !== "strength";
-}
-
-/** Grade counts of a session (core/hip sessions have none). */
+/** Grade counts of a session's bouldering block (none without one). */
 export function sessionGrades(s: Session): GradeCount[] {
-  return isClimbing(s) ? (s.grades ?? []) : [];
+  return getBlock(s, "bouldering")?.grades ?? [];
 }
 
-/** Detailed boulders of a session (core/hip sessions have none). */
+/** Detailed boulders of a session's bouldering block (none without one). */
 export function sessionBoulders(s: Session): BoulderLog[] {
-  return isClimbing(s) ? (s.boulders ?? []) : [];
+  return getBlock(s, "bouldering")?.boulders ?? [];
+}
+
+/** A session together with its hangs block. */
+export interface HangSession {
+  session: Session;
+  hang: HangBlock;
+}
+
+/** Sessions with a hangs block, newest first. */
+export function hangSessions(sessions: Session[]): HangSession[] {
+  const out: HangSession[] = [];
+  for (const session of sessions) {
+    const hang = getBlock(session, "hangs");
+    if (hang) out.push({ session, hang });
+  }
+  return out.sort((a, b) => b.session.date.localeCompare(a.session.date));
 }
 
 /**
- * A work-day is compressed-rest when the previous work-day session was at
- * most this many calendar days earlier (e.g. Mon → Wed). Weekend and core/hip
- * sessions don't count as "previous".
+ * A hang session is compressed-rest when the previous session with hangs was
+ * at most this many calendar days earlier (e.g. Mon → Wed). Sessions without
+ * a hangs block don't count as "previous".
  */
 export const COMPRESSED_MAX_GAP_DAYS = 2;
 
 export interface DerivedSessionType {
   type: SessionType;
-  prevDate?: string; // previous work-day session, if any
+  prevDate?: string; // previous session with hangs, if any
   gapDays?: number;
 }
 
-/** Normal vs compressed-rest for a work-day on `date`, from the dates alone. */
+/** Normal vs compressed-rest for hangs on `date`, from the dates alone. */
 export function deriveSessionType(
   date: string,
   sessions: Session[],
   excludeId?: string,
 ): DerivedSessionType {
-  const prev = sessions
-    .filter((s) => isWorkday(s) && s.id !== excludeId && s.date < date)
-    .sort((a, b) => b.date.localeCompare(a.date))[0];
+  const prev = hangSessions(sessions)
+    .map((h) => h.session)
+    .find((s) => s.id !== excludeId && s.date < date);
   if (!prev) return { type: "normal" };
   const gapDays = daysBetween(prev.date, date);
   return {
@@ -76,28 +84,18 @@ export function deriveSessionType(
 }
 
 /**
- * Effective type of every work-day session, keyed by id: the user's override
- * if set, otherwise derived from dates. The legacy stored `sessionType` tag is
- * deliberately ignored (older data tagged it inconsistently).
+ * Effective type of every session with hangs, keyed by session id: the
+ * user's override if set, otherwise derived from dates.
  */
 export function sessionTypes(sessions: Session[]): Map<string, SessionType> {
   const types = new Map<string, SessionType>();
-  for (const s of sessions) {
-    if (!isWorkday(s)) continue;
+  for (const { session, hang } of hangSessions(sessions)) {
     types.set(
-      s.id,
-      s.sessionTypeOverride ?? deriveSessionType(s.date, sessions).type,
+      session.id,
+      hang.typeOverride ?? deriveSessionType(session.date, sessions).type,
     );
   }
   return types;
-}
-
-/** Workday sessions that recorded a main hang, newest first. */
-export function mainHangSessions(sessions: Session[]): WorkdaySession[] {
-  return sessions
-    .filter(isWorkday)
-    .filter((s): s is WorkdaySession => !!s.mainHang)
-    .sort((a, b) => b.date.localeCompare(a.date));
 }
 
 export interface ProgressionStatus {
@@ -118,16 +116,15 @@ export function progressionStatus(
   n = 3,
 ): ProgressionStatus | null {
   const types = sessionTypes(sessions);
-  const relevant = mainHangSessions(sessions).filter(
-    (s) => types.get(s.id) !== "compressed-rest",
+  const relevant = hangSessions(sessions).filter(
+    (h) => types.get(h.session.id) !== "compressed-rest",
   );
   if (relevant.length === 0) return null;
 
-  const { edgeMm, addedWeight } = relevant[0].mainHang!;
+  const { edgeMm, addedWeight } = relevant[0].hang;
 
   let streak = 0;
-  for (const s of relevant) {
-    const mh = s.mainHang!;
+  for (const { hang: mh } of relevant) {
     const sameSetting = mh.edgeMm === edgeMm && mh.addedWeight === addedWeight;
     const clean =
       mh.setsIntended > 0 && mh.setsCompleted >= mh.setsIntended;
@@ -169,9 +166,9 @@ export function bodyweightShiftSinceLastHang(
   unit: Unit,
   excludeId?: string,
 ): BodyweightShift | undefined {
-  const lastHang = mainHangSessions(sessions).find(
-    (s) => s.id !== excludeId && s.date <= date,
-  );
+  const lastHang = hangSessions(sessions)
+    .map((h) => h.session)
+    .find((s) => s.id !== excludeId && s.date <= date);
   if (!lastHang) return undefined;
   const then = bodyweightOnOrBefore(bodyweights, lastHang.date);
   const now = bodyweightOnOrBefore(bodyweights, date);
@@ -181,9 +178,4 @@ export function bodyweightShiftSinceLastHang(
   return Math.abs(change) > threshold
     ? { change, lastHangDate: lastHang.date }
     : undefined;
-}
-
-/** Sum of boulders logged across all grades for a workday session. */
-export function totalBoulders(s: WorkdaySession): number {
-  return s.grades.reduce((sum, g) => sum + (g.count || 0), 0);
 }

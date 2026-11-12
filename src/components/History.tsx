@@ -1,21 +1,21 @@
 import { useMemo, useState } from "react";
 import {
   AppData,
+  Block,
+  BlockKind,
   BoulderLog,
+  PullupSet,
   Session,
   SessionType,
-  StrengthSession,
-  Unit,
 } from "../types";
 import { Actions } from "../lib/storage";
 import {
   bodyweightOnOrBefore,
-  isClimbing,
   loadPercentBW,
   sessionBoulders,
   sessionTypes,
-  totalBoulders,
 } from "../lib/calculations";
+import { BLOCK_KINDS, hasBlock } from "../lib/blocks";
 import { describePain, hasPainCheck, painAlerts } from "../lib/pain";
 import { prescriptionGaps } from "../lib/strength";
 import {
@@ -31,7 +31,7 @@ import { formatDate, pct, signed } from "../lib/format";
 import { Segmented } from "./ui";
 import Projects from "./Projects";
 
-type Filter = "all" | "workday" | "weekend" | "strength" | "compressed-rest";
+type Filter = "all" | BlockKind | "compressed-rest";
 
 export default function History({
   data,
@@ -83,22 +83,25 @@ function SessionList({
     () => [...data.sessions].sort((a, b) => b.date.localeCompare(a.date)),
     [data.sessions],
   );
-  // Effective normal/compressed-rest per work-day (derived from dates).
+  // Effective normal/compressed-rest per session with hangs (from dates).
   const types = useMemo(() => sessionTypes(data.sessions), [data.sessions]);
 
   const shown = sessions.filter((s) => {
     if (filter === "all") return true;
     if (filter === "compressed-rest")
       return types.get(s.id) === "compressed-rest";
-    return s.kind === filter;
+    return hasBlock(s, filter);
   });
 
+  // Only offer filters that match something.
   const filters: { value: Filter; label: string }[] = [
     { value: "all", label: "All" },
-    { value: "workday", label: "Work-day" },
-    { value: "weekend", label: "Weekend" },
-    { value: "strength", label: "Core/hip" },
-    { value: "compressed-rest", label: "Compressed" },
+    ...BLOCK_KINDS.filter((k) => sessions.some((s) => hasBlock(s, k.kind))).map(
+      (k) => ({ value: k.kind as Filter, label: k.label }),
+    ),
+    ...([...types.values()].includes("compressed-rest")
+      ? [{ value: "compressed-rest" as Filter, label: "Compressed" }]
+      : []),
   ];
 
   return (
@@ -143,12 +146,11 @@ function SessionCard({
   onDelete,
 }: {
   session: Session;
-  sessionType?: SessionType; // effective type, work-day sessions only
+  sessionType?: SessionType; // effective type, sessions with hangs only
   data: AppData;
   onEdit: () => void;
   onDelete: () => void;
 }) {
-  const unit = data.unit;
   // Detailed boulders can make a card long, so they start collapsed.
   const [showBoulders, setShowBoulders] = useState(false);
   const boulders = sessionBoulders(session);
@@ -163,10 +165,8 @@ function SessionCard({
       <div className="entry-head">
         <span className="date">{formatDate(session.date)}</span>
         <span className="badges">
-          {isClimbing(session) && session.gym && (
-            <span className="badge gym">📍 {session.gym}</span>
-          )}
-          {isClimbing(session) && session.rpe != null && (
+          {session.gym && <span className="badge gym">📍 {session.gym}</span>}
+          {session.rpe != null && (
             <span className="badge">
               RPE {session.rpe} · {RPE_LABELS[session.rpe]}
             </span>
@@ -174,91 +174,22 @@ function SessionCard({
           {session.durationMin != null && (
             <span className="badge">⏱ {session.durationMin} min</span>
           )}
-          {session.kind === "strength" ? (
-            <span className="badge core">Core/hip</span>
-          ) : session.kind === "weekend" ? (
-            <span className="badge weekend">Weekend</span>
-          ) : sessionType === "compressed-rest" ? (
+          {sessionType === "compressed-rest" && (
             <span className="badge compressed">Compressed rest</span>
-          ) : (
-            <span className="badge">Work-day</span>
           )}
         </span>
       </div>
 
-      {session.kind === "strength" ? (
-        <StrengthSummary session={session} unit={unit} />
-      ) : session.kind === "workday" ? (
-        <>
-          <div className="entry-meta">
-            {session.mainHang &&
-              (() => {
-                const bw = bodyweightOnOrBefore(
-                  data.bodyweights,
-                  session.date,
-                );
-                const load = bw
-                  ? loadPercentBW(bw.weight, session.mainHang.addedWeight)
-                  : undefined;
-                return (
-                  <span>
-                    Hang:{" "}
-                    <b>
-                      {session.mainHang.edgeMm}mm{" "}
-                      {signed(session.mainHang.addedWeight, unit)}
-                    </b>
-                    {load != null && <> · {pct(load)} BW</>} ·{" "}
-                    {session.mainHang.setsCompleted}/
-                    {session.mainHang.setsIntended} sets
-                  </span>
-                );
-              })()}
-            {totalBoulders(session) > 0 && (
-              <span>
-                Boulders:{" "}
-                <b>
-                  {session.grades
-                    .filter((g) => g.count > 0)
-                    .map((g) => `${g.grade}×${g.count}`)
-                    .join("  ")}
-                </b>
-              </span>
-            )}
-            {session.accessory && (
-              <span>
-                {session.accessory.type === "weighted" ? "Weighted" : "BW"}{" "}
-                pull-ups:{" "}
-                <b>
-                  {session.accessory.sets != null &&
-                    `${session.accessory.sets} × `}
-                  {session.accessory.reps} reps
-                </b>
-                {session.accessory.type === "weighted" &&
-                  session.accessory.addedWeight != null &&
-                  ` ${signed(session.accessory.addedWeight, unit)}`}
-              </span>
-            )}
-          </div>
-          {session.notes && <div className="entry-notes">{session.notes}</div>}
-        </>
+      {session.blocks.length > 0 ? (
+        <div className="entry-blocks">
+          {session.blocks.map((b) => (
+            <BlockSummary key={b.kind} block={b} session={session} data={data} />
+          ))}
+        </div>
       ) : (
-        <>
-          {session.grades && session.grades.some((g) => g.count > 0) && (
-            <div className="entry-meta">
-              <span>
-                Boulders:{" "}
-                <b>
-                  {session.grades
-                    .filter((g) => g.count > 0)
-                    .map((g) => `${g.grade}×${g.count}`)
-                    .join("  ")}
-                </b>
-              </span>
-            </div>
-          )}
-          {session.notes && <div className="entry-notes">{session.notes}</div>}
-        </>
+        <div className="entry-meta muted">No blocks logged</div>
       )}
+      {session.notes && <div className="entry-notes">{session.notes}</div>}
 
       {session.pain && hasPainCheck(session.pain) && (
         <div className={`pain-line ${painFlagged ? "flagged" : ""}`}>
@@ -311,36 +242,103 @@ function SessionCard({
   );
 }
 
-/** Core/hip checklist as one line, plus whether it matched the prescription. */
-function StrengthSummary({
-  session,
-  unit,
-}: {
-  session: StrengthSession;
-  unit: Unit;
-}) {
-  const gaps = prescriptionGaps(session, unit);
-  const { deadlift: dl, glutBridge: gb, sidePlank: sp } = session;
-  const done = [
-    session.breathing && "breathing ✓",
-    dl &&
-      `deadlift ${dl.sets ?? "?"}×${dl.reps ?? "?"}` +
-        (dl.weight != null ? ` @ ${dl.weight} ${unit}` : ""),
-    gb && `glute bridge ${gb.sets ?? "?"}×${gb.reps ?? "?"}/side`,
-    sp && `side plank ${sp.sets ?? "?"}×${sp.seconds ?? "?"} s/side`,
-  ].filter(Boolean);
+/** "3×8 · 2×5 @ +10 kg": consecutive identical sets are grouped. */
+function describeSets(sets: PullupSet[], unit: string): string {
+  const groups: { n: number; set: PullupSet }[] = [];
+  for (const s of sets) {
+    const last = groups[groups.length - 1];
+    if (last && last.set.reps === s.reps && last.set.addedWeight === s.addedWeight)
+      last.n += 1;
+    else groups.push({ n: 1, set: s });
+  }
+  return groups
+    .map(
+      ({ n, set }) =>
+        (n > 1 ? `${n}×${set.reps}` : `${set.reps}`) +
+        (set.addedWeight ? ` @ ${signed(set.addedWeight, unit)}` : ""),
+    )
+    .join(" · ");
+}
 
-  return (
-    <>
-      <div className="entry-meta">
-        <span>{done.length ? done.join(" · ") : "Nothing ticked"}</span>
-      </div>
-      <div className={`prescribed ${gaps.length ? "" : "ok"}`}>
-        {gaps.length ? `Short of prescription: ${gaps.join(", ")}` : "✓ As prescribed"}
-      </div>
-      {session.notes && <div className="entry-notes">{session.notes}</div>}
-    </>
-  );
+/** One line per block in a session card. */
+function BlockSummary({
+  block,
+  session,
+  data,
+}: {
+  block: Block;
+  session: Session;
+  data: AppData;
+}) {
+  const unit = data.unit;
+  switch (block.kind) {
+    case "bouldering": {
+      const sends = block.grades.filter((g) => g.count > 0);
+      return (
+        <div className="entry-meta">
+          <span>
+            Boulders:{" "}
+            {sends.length ? (
+              <b>{sends.map((g) => `${g.grade}×${g.count}`).join("  ")}</b>
+            ) : (
+              <span className="muted">no sends</span>
+            )}
+          </span>
+        </div>
+      );
+    }
+    case "hangs": {
+      const bw = bodyweightOnOrBefore(data.bodyweights, session.date);
+      const load = bw ? loadPercentBW(bw.weight, block.addedWeight) : undefined;
+      return (
+        <div className="entry-meta">
+          <span>
+            Hangs:{" "}
+            <b>
+              {block.edgeMm}mm {signed(block.addedWeight, unit)}
+            </b>
+            {load != null && <> · {pct(load)} BW</>} · {block.setsCompleted}/
+            {block.setsIntended} sets
+          </span>
+        </div>
+      );
+    }
+    case "corehip": {
+      const gaps = prescriptionGaps(block, unit);
+      const { deadlift: dl, glutBridge: gb, sidePlank: sp } = block;
+      const done = [
+        block.breathing && "breathing ✓",
+        dl &&
+          `deadlift ${dl.sets ?? "?"}×${dl.reps ?? "?"}` +
+            (dl.weight != null ? ` @ ${dl.weight} ${unit}` : ""),
+        gb && `glute bridge ${gb.sets ?? "?"}×${gb.reps ?? "?"}/side`,
+        sp && `side plank ${sp.sets ?? "?"}×${sp.seconds ?? "?"} s/side`,
+      ].filter(Boolean);
+      return (
+        <>
+          <div className="entry-meta">
+            <span>
+              Core/hip: {done.length ? done.join(" · ") : "nothing ticked"}
+            </span>
+          </div>
+          <div className={`prescribed ${gaps.length ? "" : "ok"}`}>
+            {gaps.length
+              ? `Short of prescription: ${gaps.join(", ")}`
+              : "✓ As prescribed"}
+          </div>
+        </>
+      );
+    }
+    case "pullups":
+      return (
+        <div className="entry-meta">
+          <span>
+            Pull-ups:{" "}
+            <b>{describeSets(block.sets, unit)}</b>
+          </span>
+        </div>
+      );
+  }
 }
 
 /**

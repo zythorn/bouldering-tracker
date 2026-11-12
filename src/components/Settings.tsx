@@ -2,7 +2,8 @@ import { useRef, useState } from "react";
 import { AppData, Unit } from "../types";
 import { Actions, listBackups, migrate } from "../lib/storage";
 import { GRADE_COLOR_NAMES, gradeFill } from "../lib/colors";
-import { Field, Segmented } from "./ui";
+import { BLOCK_KINDS } from "../lib/blocks";
+import { ChipToggle, Field, Segmented } from "./ui";
 
 export default function Settings({
   data,
@@ -14,6 +15,7 @@ export default function Settings({
   const [newGrade, setNewGrade] = useState("");
   const [newGym, setNewGym] = useState("");
   const fileRef = useRef<HTMLInputElement>(null);
+  const hiddenBlocks = data.hiddenBlocks ?? [];
 
   function addGrade() {
     const g = newGrade.trim().toUpperCase();
@@ -143,6 +145,35 @@ export default function Settings({
           <button className="btn" onClick={addGrade} style={{ flex: "0 0 auto" }}>
             Add grade
           </button>
+        </div>
+      </div>
+
+      <div className="card">
+        <h2>Training blocks</h2>
+        <p className="hint" style={{ marginTop: -6 }}>
+          Blocks offered under "Add a block" when logging. Hiding one (e.g.
+          hangs while they're paused) keeps past sessions untouched.
+        </p>
+        <div className="chip-row">
+          {BLOCK_KINDS.map((k) => {
+            const shown = !hiddenBlocks.includes(k.kind);
+            return (
+              <ChipToggle
+                key={k.kind}
+                active={shown}
+                label={`Offer ${k.label} block`}
+                onClick={() =>
+                  actions.setHiddenBlocks(
+                    shown
+                      ? [...hiddenBlocks, k.kind]
+                      : hiddenBlocks.filter((h) => h !== k.kind),
+                  )
+                }
+              >
+                {k.label}
+              </ChipToggle>
+            );
+          })}
         </div>
       </div>
 

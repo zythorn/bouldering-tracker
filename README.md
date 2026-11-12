@@ -25,11 +25,14 @@ with `npm run build` and preview it with `npm run preview`.
 
 ```
 src/
-  types.ts               Data model (sessions, boulders, projects, bodyweight…)
+  types.ts               Data model (sessions made of blocks, boulders,
+                         projects, bodyweight…)
   lib/
     storage.ts           useAppData() hook — state + localStorage + actions,
                          and migrate() for older saved/exported data
-    calculations.ts      %BW load, "most recent bodyweight", progression rule
+    blocks.ts            Block kinds, lookup helpers, newBlock() factory
+    calculations.ts      %BW load, "most recent bodyweight", compressed rest,
+                         progression rule
     boulders.ts          Boulder vocabulary (tags, feel, RPE) + derived
                          project stats/status
     pain.ts              Pain-check areas, scale, "last pain check" lookup
@@ -38,10 +41,13 @@ src/
     stats.ts             Boulder stats (projects merged) + session RPE series
     format.ts            Date / number formatting + calendar arithmetic
   components/
-    LogSession.tsx       Work-day + weekend logging form (the quick-log flow)
-    StrengthForm.tsx     Core/hip session form (physio checklist)
+    LogSession.tsx       The session form: details + "Add a block…" + RPE/pain
+    blockDraft.ts        Blocks as the form edits them (toDraft / fromDraft)
+    BoulderingBlock.tsx  Grade counters + detailed boulders
+    HangsBlock.tsx       Main hangs, compressed rest, progression preview
+    CoreHipBlock.tsx     Core/hip physio checklist
+    PullupsBlock.tsx     Pull-ups, one row per set
     PainField.tsx        0–5 pain check (elbow / wrist / lower back)
-    BoulderingBlock.tsx  Grade counters + detailed boulders (shared by both forms)
     BoulderSheet.tsx     Bottom sheet for logging one boulder in detail
     History.tsx          Sessions list (filterable) / Projects toggle
     Projects.tsx         Tracked projects: progress, edit, retire, delete
@@ -57,7 +63,12 @@ src/
 
 **Must-haves**
 
-- Add / edit / delete work-day and weekend sessions.
+- Add / edit / delete sessions. A session is built from **training blocks**:
+  it starts empty and "Add a block…" adds Bouldering, Hangs, Core/hip or
+  Pull-ups (each at most once). Date, gym, duration, RPE, pain and notes
+  belong to the session. Block kinds can be hidden from the menu in Settings
+  (past sessions keep them). History shows one line per block and filters by
+  block kind.
 - Bodyweight log; the most recent entry on or before a session's date is used
   for all %bodyweight calculations (so numbers stay comparable as weight drifts).
 - History view, filterable by session type.
@@ -75,12 +86,12 @@ src/
   computing the progression streak.
 - **Pull-up strength trend** — sparse line chart from periodic strength tests.
 - **Quick-log flow** — mobile-first layout, big steppers for grade counts,
-  optional sections collapsed by default, sensible defaults (33mm, 6 sets).
+  sensible defaults (33mm, 6 sets; core/hip at the prescribed dose).
+- **Pull-ups block** — each set logged separately with reps and optional
+  signed added weight (%BW shown for weighted sets). Starts with one set;
+  "Add set" copies the previous set's numbers.
 - **Gyms** — attach a gym to any session; the list is managed in Settings and
   new gyms can be added inline while logging. Shown as a badge in history.
-- **Skippable main hangs** — a work-day session (e.g. a compressed-rest /
-  recovery day) can omit main hangs entirely; skipped sessions never appear in
-  the hangboard graph or count toward the progression streak.
 - **Grade colours** — assign each grade a hold colour (white/yellow/green/blue/
   red/black/purple/orange) in Settings; the grade-volume chart uses it.
 - **Detailed boulders** — tap a grade label ("V5 ＋") to log a single boulder:
@@ -105,15 +116,15 @@ src/
   threshold as a dashed line, and the Log screen shows a banner when the last
   session *that recorded a pain check* had a 2+. The app only records scores
   and points back to the plan's stop rules; it never interprets them.
-- **Core/hip sessions** — a third session type with the physio's checklist
-  (breathing/core control, banded deadlift under 20 kg, single-leg glute
-  bridge, side plank), prefilled at the prescribed dose. "Completed as
-  prescribed" is derived from what was logged. The Log screen shows
-  "Core/hip this week: n/3 (min 2)" for the current Monday–Sunday week.
-- **Compressed rest from dates** — a work-day session is compressed-rest when
-  the previous work-day session was at most 2 calendar days earlier (weekend
-  and core/hip sessions don't count). It can be overridden per session. The
-  manual `sessionType` tag older versions stored is kept but no longer read.
+- **Core/hip block** — the physio's checklist (breathing/core control, banded
+  deadlift under 20 kg, single-leg glute bridge, side plank), prefilled at the
+  prescribed dose. "Completed as prescribed" is derived from what was logged.
+  The Log screen shows "Core/hip this week: n/3 (min 2)" for the current
+  Monday–Sunday week (sessions with a core/hip block).
+- **Compressed rest from dates** — lives in the Hangs block: hangs are
+  compressed-rest when the previous session with hangs was at most 2 calendar
+  days earlier (sessions without hangs don't count). It can be overridden per
+  session.
 - **Bodyweight trend & reminders** — a chart on the Weight tab, a
   "no weigh-in for 7+ days" reminder, and a warning on the hang section when
   bodyweight moved more than 2 kg (4.4 lb) since the last hang session.
@@ -147,6 +158,12 @@ upgrades itself:
   (grouped by name), each session getting a linked boulder entry. The old field
   never stored a grade or attempts, so those start empty.
 - Activation-hang data (feature removed) is dropped.
+- Fixed session kinds become blocks: work-day / weekend sessions get a
+  Bouldering block when anything was climbed, a Hangs block when hangs were
+  logged (with any compressed-rest override) and a Pull-ups block from the old
+  accessory entry ("3 × 8" becomes three sets of 8); core/hip sessions get a
+  Core/hip block. The work-day / weekend distinction and the unused manual
+  `sessionType` tag are dropped.
 
 Whenever `migrate()` changes stored data on load, the untouched original is
 kept in localStorage (one copy per day) and offered for download under
@@ -156,16 +173,20 @@ Settings → Data → Pre-upgrade backups.
 
 - **Weekly training load** — sum of session RPE × duration per week, once a
   few weeks of durations have been logged.
-- **"Feature 2" (to be discussed)** — a major change motivated by reworking
-  Accessory / pull-ups. The endurance block from the v2 brief (rounds, minutes
-  per round, rest, target effort, completed as planned; continuous-climbing
-  minutes over time) waits for the next training stage and may fold into it.
+- **Session presets** — e.g. "Workday A = Hangs + Bouldering": a saved name
+  plus a list of block kinds (maybe prefilled values later), offered in the
+  "Add a block" menu. Every block is created through `newBlock()`, so this
+  needs no change to stored sessions.
+- **Endurance block** — from the v2 brief (rounds, minutes per round, rest,
+  target effort, completed as planned; continuous-climbing minutes over time),
+  for the next training stage. A new block kind: one type, one form, one
+  history line.
 - **v2 brief, later** — hang additions once hangs resume: seconds held per
   set, and a second edge for occasional tests (fold into "multiple hang groups"
   below).
 - **Multiple hang groups per session** — log mixed edges/loads in one session
-  (e.g. 2 sets on 20mm + 4 sets on 33mm). Requires turning the single
-  `mainHang` into a list, and teaching the progression streak and hangboard
+  (e.g. 2 sets on 20mm + 4 sets on 33mm). Requires turning the Hangs
+  block's single edge/load into a list, and teaching the progression streak and hangboard
   chart to work per edge rather than per session.
 
 ## Notes on the maths

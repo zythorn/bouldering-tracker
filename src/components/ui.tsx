@@ -25,16 +25,19 @@ export function NumberInput({
   step = 1,
   placeholder,
   min,
+  label,
 }: {
   value: number | undefined;
   onChange: (v: number | undefined) => void;
   step?: number;
   placeholder?: string;
   min?: number;
+  label?: string; // accessible name when there's no <label> next to it
 }) {
   return (
     <input
       type="number"
+      aria-label={label}
       inputMode="decimal"
       step={step}
       min={min}

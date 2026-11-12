@@ -1,6 +1,7 @@
 // Time ranges, grade filters and the gym × grade table for the Trends tab.
 import { Session } from "../types";
-import { isClimbing, sessionGrades } from "./calculations";
+import { sessionGrades } from "./calculations";
+import { hasBlock } from "./blocks";
 import { addDays, addMonths, weekStart } from "./format";
 
 /** Rolling ranges for the per-session chart (calendar periods would leave it
@@ -88,7 +89,7 @@ export interface GymTable {
   grades: string[]; // every grade with a send in the period, in list order
 }
 
-/** Sends per grade at each gym within a period (core/hip sessions excluded). */
+/** Sends per grade at each gym within a period (sessions with a bouldering block). */
 export function gymGradeTable(
   sessions: Session[],
   gradeOrder: string[],
@@ -102,7 +103,7 @@ export function gymGradeTable(
   const seen = new Set<string>();
 
   for (const s of sessions) {
-    if (!isClimbing(s)) continue;
+    if (!hasBlock(s, "bouldering")) continue;
     if ((from && s.date < from) || (to && s.date > to)) continue;
     let row: GymRow;
     if (s.gym) {

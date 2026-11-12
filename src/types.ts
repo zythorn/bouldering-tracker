@@ -25,13 +25,6 @@ export interface GradeCount {
   count: number;
 }
 
-export interface Accessory {
-  type: "bodyweight" | "weighted";
-  sets?: number;
-  reps: number; // reps per set
-  addedWeight?: number; // only for weighted
-}
-
 export type BoulderTag =
   | "slab"
   | "vertical"
@@ -80,62 +73,64 @@ export interface PainScores {
   back?: number; // lower back
 }
 
-export interface WorkdaySession {
-  id: string;
-  kind: "workday";
-  date: string;
-  // Normal vs compressed-rest is derived from dates (see sessionTypes() in
-  // lib/calculations). `sessionType` is the manual tag older versions stored;
-  // it is kept untouched but no longer read. `sessionTypeOverride` is set only
-  // when the user deliberately disagrees with the derived value.
-  sessionType?: SessionType;
-  sessionTypeOverride?: SessionType;
-  gym?: string;
-  mainHang?: MainHang; // omitted entirely when main hangs are skipped this session
-  grades: GradeCount[];
+// ---- Training blocks -------------------------------------------------
+// A session is a list of blocks, at most one of each kind, in the order they
+// were added. Adding a new kind of training means adding a block kind here.
+
+/** Grade counters plus optional per-boulder detail. */
+export interface BoulderBlock {
+  kind: "bouldering";
+  grades: GradeCount[]; // counts > 0 only (counters are the total of sends)
   boulders?: BoulderLog[];
-  accessory?: Accessory;
+}
+
+/**
+ * Main hangs. Normal vs compressed-rest is derived from the dates of hang
+ * sessions (see sessionTypes() in lib/calculations); `typeOverride` is set
+ * only when the user deliberately disagrees with the derived value.
+ */
+export interface HangBlock extends MainHang {
+  kind: "hangs";
+  typeOverride?: SessionType;
+}
+
+/**
+ * Physio-prescribed core/hip routine. An omitted exercise means it wasn't
+ * done; whether it matched the prescription is derived (see lib/strength).
+ */
+export interface CoreHipBlock {
+  kind: "corehip";
+  breathing?: boolean; // breathing / core control
+  deadlift?: { sets?: number; reps?: number; weight?: number }; // banded, light
+  glutBridge?: { sets?: number; reps?: number }; // single-leg, reps per side
+  sidePlank?: { sets?: number; seconds?: number }; // seconds per side
+}
+
+export interface PullupSet {
+  reps: number;
+  addedWeight?: number; // signed, in the user's unit; absent = bodyweight
+}
+
+/** Pull-ups, each set logged separately. */
+export interface PullupBlock {
+  kind: "pullups";
+  sets: PullupSet[];
+}
+
+export type Block = BoulderBlock | HangBlock | CoreHipBlock | PullupBlock;
+export type BlockKind = Block["kind"];
+export type BlockOf<K extends BlockKind> = Extract<Block, { kind: K }>;
+
+export interface Session {
+  id: string;
+  date: string;
+  gym?: string;
+  blocks: Block[];
   rpe?: number; // session effort, 0 (light) to 5 (limit)
   pain?: PainScores;
   durationMin?: number;
   notes?: string;
 }
-
-export interface WeekendSession {
-  id: string;
-  kind: "weekend";
-  date: string;
-  gym?: string;
-  grades?: GradeCount[];
-  boulders?: BoulderLog[];
-  rpe?: number;
-  pain?: PainScores;
-  durationMin?: number;
-  notes?: string;
-}
-
-/**
- * Physio-prescribed core/hip routine. An omitted exercise means it wasn't
- * done; whether the session matched the prescription is derived
- * (see lib/strength).
- */
-export interface StrengthSession {
-  id: string;
-  kind: "strength";
-  date: string;
-  breathing?: boolean; // breathing / core control
-  deadlift?: { sets?: number; reps?: number; weight?: number }; // banded, light
-  glutBridge?: { sets?: number; reps?: number }; // single-leg, reps per side
-  sidePlank?: { sets?: number; seconds?: number }; // seconds per side
-  pain?: PainScores;
-  durationMin?: number;
-  notes?: string;
-}
-
-export type Session = WorkdaySession | WeekendSession | StrengthSession;
-
-/** Sessions with a bouldering block (everything except core/hip). */
-export type ClimbingSession = WorkdaySession | WeekendSession;
 
 export interface StrengthTest {
   id: string;
@@ -160,6 +155,7 @@ export interface AppData {
   projects: TrackedProject[];
   strengthTests: StrengthTest[];
   tableHiddenGrades?: string[]; // grade columns hidden in the Trends gym table
+  hiddenBlocks?: BlockKind[]; // block kinds left out of the "Add a block" menu
 }
 
 export const DEFAULT_DATA: AppData = {

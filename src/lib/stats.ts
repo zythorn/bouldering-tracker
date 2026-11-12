@@ -1,6 +1,6 @@
 // Boulder stats and session-RPE series for the Trends tab.
 import { BoulderLog, BoulderTag, Session, TrackedProject } from "../types";
-import { isClimbing, sessionBoulders } from "./calculations";
+import { sessionBoulders } from "./calculations";
 import { isSend, logAttempts } from "./boulders";
 import { round, weekStart } from "./format";
 
@@ -168,9 +168,9 @@ const tsOf = (iso: string) => new Date(iso + "T00:00:00Z").getTime();
  * the middle of that week's sessions so it never lands in the future.
  */
 export function rpeRows(sessions: Session[], from?: string): RpeRow[] {
-  const rated = sessions
-    .filter(isClimbing)
-    .filter((s) => s.rpe != null && (!from || s.date >= from));
+  const rated = sessions.filter(
+    (s) => s.rpe != null && (!from || s.date >= from),
+  );
   const rows: RpeRow[] = rated.map((s) => ({ ts: tsOf(s.date), rpe: s.rpe }));
 
   const weeks = new Map<string, { ts: number[]; rpe: number[] }>();
