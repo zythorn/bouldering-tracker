@@ -35,6 +35,7 @@ src/
     pain.ts              Pain-check areas, scale, "last pain check" lookup
     strength.ts          Core/hip prescription + weekly (Mon–Sun) count
     trends.ts            Trends ranges/periods, grade filters, gym × grade table
+    stats.ts             Boulder stats (projects merged) + session RPE series
     format.ts            Date / number formatting + calendar arithmetic
   components/
     LogSession.tsx       Work-day + weekend logging form (the quick-log flow)
@@ -125,6 +126,16 @@ src/
   the choice is saved with the data and Total counts only visible grades.
 - **Session duration** — optional minutes on every session type, shown as a
   badge in history.
+- **Boulder stats** — from detailed boulders, per grade (hardest first): send
+  rate, flash rate and attempts to send (median, with the average below), plus
+  a per-tag table at one grade, weakest first (lowest send rate, then most
+  attempts; tags with under 3 boulders greyed out). Each tracked project counts
+  as one boulder with its attempts summed across sessions up to the send, so a
+  project sent on its third session isn't mistaken for a quick send. Send rate
+  sits beside attempts because attempts alone ignore unsent boulders. Grade
+  feel is deliberately left out.
+- **Session RPE chart** — each rated session as a dot plus each Mon–Sun week's
+  average as a line.
 - **JSON export / import** in Settings for backups / moving devices.
 
 ## Data migrations
@@ -143,9 +154,8 @@ Settings → Data → Pre-upgrade backups.
 
 ## Roadmap / future ideas
 
-- **Boulder analytics (next)** — stats from detailed boulders: e.g.
-  attempts-to-send by grade, flash rate, grade feel, or which tags cost the
-  most attempts.
+- **Weekly training load** — sum of session RPE × duration per week, once a
+  few weeks of durations have been logged.
 - **"Feature 2" (to be discussed)** — a major change motivated by reworking
   Accessory / pull-ups. The endurance block from the v2 brief (rounds, minutes
   per round, rest, target effort, completed as planned; continuous-climbing

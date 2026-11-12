@@ -34,6 +34,17 @@ import {
   gymGradeTable,
   rangeStart,
 } from "../lib/trends";
+import {
+  MIN_TAG_SAMPLE,
+  Summary,
+  collectBoulders,
+  gradeSummaries,
+  mean,
+  median,
+  rpeRows,
+  tagSummaries,
+} from "../lib/stats";
+import { RPE_LABELS, TAG_LABELS } from "../lib/boulders";
 import { round, shortDate, todayISO } from "../lib/format";
 import { ChipToggle, Segmented } from "./ui";
 
@@ -75,8 +86,10 @@ export default function Charts({
   );
   const hasPain = data.sessions.some((s) => hasPainCheck(s.pain));
   const hasTests = data.strengthTests.length > 0;
+  const hasBoulders = collectBoulders(data.sessions, data.projects).length > 0;
+  const hasRpe = data.sessions.some((s) => isClimbing(s) && s.rpe != null);
 
-  if (!hasHangs && !hasGrades && !hasPain && !hasTests) {
+  if (!hasHangs && !hasGrades && !hasPain && !hasTests && !hasRpe) {
     return (
       <div>
         <div className="section-title">
@@ -96,6 +109,8 @@ export default function Charts({
       </div>
       {hasGrades && <GradeVolumeChart data={data} />}
       {hasGrades && <GymGradeTable data={data} actions={actions} />}
+      {hasBoulders && <BoulderStats data={data} />}
+      {hasRpe && <RpeChart data={data} />}
       {hasPain && <PainChart data={data} />}
       {/* Hangs are paused, so this sits below the bouldering charts. */}
       {hasHangs && <HangboardChart data={data} />}
@@ -434,6 +449,272 @@ function GymGradeTable({ data, actions }: { data: AppData; actions: Actions }) {
           </table>
         </div>
       )}
+    </div>
+  );
+}
+
+const pct = (n: number, of: number) => `${Math.round((n / of) * 100)}%`;
+const num = (n: number) => (Number.isInteger(n) ? String(n) : n.toFixed(1));
+
+/** Median attempts to send, with the average underneath when it differs. */
+function AttemptsCell({ summary }: { summary: Summary }) {
+  const m = median(summary.attempts);
+  const avg = mean(summary.attempts);
+  if (m == null) return <span className="muted">–</span>;
+  return (
+    <>
+      {num(m)}
+      {avg != null && Math.abs(avg - m) >= 0.05 && (
+        <span className="sub-num">avg {avg.toFixed(1)}</span>
+      )}
+    </>
+  );
+}
+
+/**
+ * Stats from detailed boulders: per grade (hardest first) and per tag at one
+ * grade. Each project counts as one boulder with its attempts summed across
+ * sessions; send rate sits next to attempts so unsent boulders aren't hidden.
+ */
+function BoulderStats({ data }: { data: AppData }) {
+  const [range, setRange] = useState<ChartRange>("3m");
+  const [tagGrade, setTagGrade] = useState<string>();
+
+  const units = useMemo(
+    () =>
+      collectBoulders(data.sessions, data.projects, rangeStart(range, todayISO())),
+    [data.sessions, data.projects, range],
+  );
+  const grades = useMemo(
+    () => gradeSummaries(units, data.grades),
+    [units, data.grades],
+  );
+
+  // Default the tag view to the hardest grade with a usable sample.
+  const defaultGrade =
+    grades.find((g) => g.summary.boulders >= 5)?.grade ?? grades[0]?.grade;
+  const shownTagGrade =
+    tagGrade && grades.some((g) => g.grade === tagGrade) ? tagGrade : defaultGrade;
+  const tags = shownTagGrade ? tagSummaries(units, shownTagGrade) : [];
+  const unknownAttempts = units.some((u) => u.sent && u.attempts == null);
+
+  return (
+    <div className="card">
+      <h2>Boulder stats</h2>
+      <div className="chart-controls">
+        <select
+          className="compact"
+          aria-label="Time range"
+          value={range}
+          onChange={(e) => setRange(e.target.value as ChartRange)}
+        >
+          {CHART_RANGES.map((r) => (
+            <option key={r.value} value={r.value}>
+              {r.label}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      {grades.length === 0 ? (
+        <div className="empty" style={{ padding: "20px 0" }}>
+          No boulders logged in detail in this range.
+        </div>
+      ) : (
+        <>
+          <div className="table-scroll">
+            <table className="stats-table">
+              <thead>
+                <tr>
+                  <th>Grade</th>
+                  <th>Boulders</th>
+                  <th>Sent</th>
+                  <th>Flash</th>
+                  <th>Attempts to send</th>
+                </tr>
+              </thead>
+              <tbody>
+                {grades.map(({ grade, summary: s }) => (
+                  <tr key={grade}>
+                    <td>
+                      <b>{grade}</b>
+                    </td>
+                    <td>{s.boulders}</td>
+                    <td title={`${s.sent} of ${s.boulders}`}>
+                      {pct(s.sent, s.boulders)}
+                    </td>
+                    <td title={`${s.flashed} of ${s.boulders}`}>
+                      {pct(s.flashed, s.boulders)}
+                    </td>
+                    <td>
+                      <AttemptsCell summary={s} />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <p className="hint" style={{ marginTop: 8 }}>
+            Based on boulders logged in detail:{" "}
+            {grades.map((g) => `${g.grade} ${g.summary.boulders}`).join(" · ")}.
+            Each project counts as one boulder, with its attempts added up across
+            sessions. Attempts to send: median, with the average below.
+            {unknownAttempts &&
+              " Projects from before detailed logging have no attempt count, so they only count toward send rates."}
+          </p>
+
+          {shownTagGrade && tags.length > 0 && (
+            <>
+              <div className="card-head" style={{ marginTop: 16 }}>
+                <h3 style={{ margin: 0 }}>By tag</h3>
+                <select
+                  className="compact"
+                  aria-label="Grade for tag stats"
+                  value={shownTagGrade}
+                  onChange={(e) => setTagGrade(e.target.value)}
+                >
+                  {grades.map((g) => (
+                    <option key={g.grade} value={g.grade}>
+                      {g.grade}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="table-scroll">
+                <table className="stats-table">
+                  <thead>
+                    <tr>
+                      <th>Tag</th>
+                      <th>Boulders</th>
+                      <th>Sent</th>
+                      <th>Attempts to send</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {tags.map(({ tag, summary: s }) => (
+                      <tr
+                        key={tag}
+                        className={s.boulders < MIN_TAG_SAMPLE ? "low-n" : ""}
+                      >
+                        <td>{TAG_LABELS[tag]}</td>
+                        <td>{s.boulders}</td>
+                        <td title={`${s.sent} of ${s.boulders}`}>
+                          {pct(s.sent, s.boulders)}
+                        </td>
+                        <td>
+                          <AttemptsCell summary={s} />
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <p className="hint" style={{ marginTop: 8 }}>
+                Weakest first: lowest send rate, then most attempts. Greyed out:
+                fewer than {MIN_TAG_SAMPLE} boulders. A boulder with several tags
+                counts under each.
+              </p>
+            </>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+/** Session RPE as dots, with a line through each Mon–Sun week's average. */
+function RpeChart({ data }: { data: AppData }) {
+  const [range, setRange] = useState<ChartRange>("3m");
+  const rows = useMemo(
+    () => rpeRows(data.sessions, rangeStart(range, todayISO())),
+    [data.sessions, range],
+  );
+  const color = "#d9a441";
+
+  return (
+    <div className="card">
+      <h2>Session RPE</h2>
+      <div className="chart-controls">
+        <select
+          className="compact"
+          aria-label="Time range"
+          value={range}
+          onChange={(e) => setRange(e.target.value as ChartRange)}
+        >
+          {CHART_RANGES.map((r) => (
+            <option key={r.value} value={r.value}>
+              {r.label}
+            </option>
+          ))}
+        </select>
+      </div>
+      {rows.length === 0 ? (
+        <div className="empty" style={{ padding: "20px 0" }}>
+          No rated sessions in this range.
+        </div>
+      ) : (
+        <div className="chart-wrap" style={{ height: 220 }}>
+          <ResponsiveContainer width="100%" height="100%">
+            <LineChart data={rows} margin={{ top: 8, right: 12, bottom: 4, left: -24 }}>
+              <CartesianGrid stroke={grid} />
+              <XAxis
+                type="number"
+                dataKey="ts"
+                domain={["dataMin", "dataMax"]}
+                tickFormatter={(ts) =>
+                  shortDate(new Date(ts).toISOString().slice(0, 10))
+                }
+                tick={axis}
+                stroke={grid}
+              />
+              <YAxis
+                tick={axis}
+                stroke={grid}
+                domain={[0, 5]}
+                ticks={[0, 1, 2, 3, 4, 5]}
+                allowDecimals={false}
+              />
+              <Tooltip
+                contentStyle={tooltipStyle}
+                labelFormatter={(ts, payload) => {
+                  const week = payload?.[0]?.payload?.week as string | undefined;
+                  return week
+                    ? `Week of ${shortDate(week)}`
+                    : shortDate(new Date(Number(ts)).toISOString().slice(0, 10));
+                }}
+                formatter={(v: number, name: string) => [
+                  `${v} · ${RPE_LABELS[Math.round(v)]}`,
+                  name,
+                ]}
+              />
+              <Legend wrapperStyle={{ fontSize: 12 }} />
+              <Line
+                dataKey="rpe"
+                name="Session"
+                stroke="none"
+                legendType="circle"
+                dot={{ r: 4, fill: color, strokeWidth: 0 }}
+                activeDot={{ r: 6 }}
+                isAnimationActive={false}
+              />
+              <Line
+                dataKey="avg"
+                name="Weekly average"
+                type="linear"
+                stroke="#e6edf3"
+                strokeWidth={2}
+                connectNulls
+                dot={{ r: 3, fill: "#e6edf3", strokeWidth: 0 }}
+                isAnimationActive={false}
+              />
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
+      )}
+      <p className="hint" style={{ marginTop: 6 }}>
+        0 light · 1 easy · 2 moderate · 3 hard · 4 very hard · 5 limit. The line
+        is each Monday–Sunday week's average.
+      </p>
     </div>
   );
 }

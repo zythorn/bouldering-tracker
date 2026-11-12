@@ -108,12 +108,16 @@ export function DurationField({
   value: number | undefined;
   onChange: (v: number | undefined) => void;
 }) {
+  // Its own heading, so it doesn't read as part of the section above it.
   return (
-    <div className="grid-2" style={{ marginTop: 14 }}>
-      <Field label="Duration (min)">
-        <NumberInput value={value} onChange={onChange} min={0} placeholder="e.g. 90" />
-      </Field>
-    </div>
+    <>
+      <h3>Duration</h3>
+      <div className="grid-2">
+        <Field label="Minutes">
+          <NumberInput value={value} onChange={onChange} min={0} placeholder="e.g. 90" />
+        </Field>
+      </div>
+    </>
   );
 }
 

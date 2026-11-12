@@ -155,9 +155,16 @@ textarea {
   color: var(--muted);
 }
 
+/* Secondary explanatory text. Applies everywhere, not just inside fields:
+   hints in cards and under charts were previously rendered at full size. */
+.hint {
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--muted);
+}
+
 .field .hint {
   font-size: 11px;
-  color: var(--muted);
 }
 
 input,
@@ -751,6 +758,7 @@ select.compact {
   color: var(--muted);
   font-weight: 600;
   font-size: 12px;
+  white-space: normal; /* long headers ("Attempts to send") wrap, not widen */
 }
 
 .stats-table th:first-child,
@@ -769,6 +777,20 @@ select.compact {
 .stats-table .muted-row td:first-child {
   color: var(--muted);
   font-style: italic;
+}
+
+/* Too few boulders to say much (tag stats) */
+.stats-table tr.low-n td {
+  color: var(--muted);
+  opacity: 0.6;
+}
+
+/* Secondary figure under a table number, e.g. "avg 5.5" */
+.sub-num {
+  display: block;
+  font-size: 10px;
+  color: var(--muted);
+  font-weight: 400;
 }
 
 /* List items --------------------------------------------------------- */

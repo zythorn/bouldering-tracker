@@ -74,10 +74,12 @@ function load(): AppData {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return DEFAULT_DATA;
+    // Normalise formatting first so whitespace alone never counts as a change.
+    const original = JSON.stringify(JSON.parse(raw));
     const data = migrate(JSON.parse(raw) as Partial<AppData>);
     // If migrating changed anything, keep the untouched original before the
     // upgraded version is saved over it (one backup per day, never overwritten).
-    if (JSON.stringify(data) !== raw) {
+    if (JSON.stringify(data) !== original) {
       const key = BACKUP_PREFIX + todayISO();
       if (!localStorage.getItem(key)) localStorage.setItem(key, raw);
     }
